@@ -41,7 +41,7 @@ export class GenerateCopilotInstructionsUseCase {
     return patterns;
   }
 
-  private generateRecommendations(agent: Agent, patterns: string[]): string[] {
+  private generateRecommendations(agent: Agent, _patterns: string[]): string[] {
     const recommendations: string[] = [];
 
     // Generate recommendations based on agent metadata
@@ -59,7 +59,7 @@ export class GenerateCopilotInstructionsUseCase {
 
   private generateInstructions(
     agent: Agent,
-    patterns: string[],
+    _patterns: string[],
     recommendations: string[]
   ): string {
     let instructions = `# Copilot Instructions for ${agent.metadata.name}\n\n`;

@@ -1,0 +1,67 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"],
+      "env": {
+        "LOG_LEVEL": "info"
+      }
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git"],
+      "env": {
+        "GIT_AUTHOR_NAME": "AI Agent",
+        "GIT_AUTHOR_EMAIL": "agent@example.com"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "env": {
+        "PUPPETEER_HEADLESS": "true"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "file_operations",
+      "enabled": true,
+      "servers": ["filesystem"]
+    },
+    {
+      "name": "git_operations",
+      "enabled": true,
+      "servers": ["git"]
+    },
+    {
+      "name": "github_operations",
+      "enabled": true,
+      "servers": ["github"]
+    },
+    {
+      "name": "database_operations",
+      "enabled": false,
+      "servers": ["postgres"]
+    },
+    {
+      "name": "browser_automation",
+      "enabled": false,
+      "servers": ["puppeteer"]
+    }
+  ]
+}
