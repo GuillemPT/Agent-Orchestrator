@@ -7,6 +7,7 @@ import { KeytarSecureStorage } from '../infrastructure/services/KeytarSecureStor
 import { CopilotSyncService } from '../infrastructure/services/CopilotSyncService';
 import { MCPToolsService } from '../infrastructure/services/MCPToolsService';
 import { GitService } from '../infrastructure/services/GitService';
+import { RepositoryAnalyzerService } from '../infrastructure/services/RepositoryAnalyzerService';
 import {
   CreateAgentUseCase,
   UpdateAgentUseCase,
@@ -36,7 +37,7 @@ import {
   SyncCopilotDirectoriesUseCase,
   DetectChangesUseCase,
 } from '../application/use-cases/SyncUseCases';
-import { GenerateCopilotInstructionsUseCase } from '../application/use-cases/PatternAnalysisUseCases';
+import { GenerateCopilotInstructionsUseCase, AnalyzeRepositoryUseCase, ValidateGlobPatternUseCase, FindFilesMatchingPatternUseCase } from '../application/use-cases/PatternAnalysisUseCases';
 import {
   GetGitStatusUseCase,
   AtomicCommitUseCase,
@@ -54,6 +55,7 @@ const secureStorage = new KeytarSecureStorage();
 const syncService = new CopilotSyncService();
 const mcpToolsService = new MCPToolsService();
 const gitService = new GitService();
+const repositoryAnalyzer = new RepositoryAnalyzerService();
 
 // Initialize use cases
 const createAgentUseCase = new CreateAgentUseCase(agentRepository);
@@ -82,6 +84,9 @@ const syncCopilotDirectoriesUseCase = new SyncCopilotDirectoriesUseCase(syncServ
 const detectChangesUseCase = new DetectChangesUseCase(syncService);
 
 const generateCopilotInstructionsUseCase = new GenerateCopilotInstructionsUseCase();
+const analyzeRepositoryUseCase = new AnalyzeRepositoryUseCase(repositoryAnalyzer);
+const validateGlobPatternUseCase = new ValidateGlobPatternUseCase(repositoryAnalyzer);
+const findFilesMatchingPatternUseCase = new FindFilesMatchingPatternUseCase(repositoryAnalyzer);
 
 const getGitStatusUseCase = new GetGitStatusUseCase(gitService);
 const atomicCommitUseCase = new AtomicCommitUseCase(gitService);
@@ -233,6 +238,18 @@ ipcMain.handle('sync:detectChanges', async () => {
 // IPC Handlers for Pattern Analysis
 ipcMain.handle('pattern:generateInstructions', async (_event, agent, patterns) => {
   return await generateCopilotInstructionsUseCase.execute(agent, patterns);
+});
+
+ipcMain.handle('pattern:analyzeRepository', async () => {
+  return await analyzeRepositoryUseCase.execute();
+});
+
+ipcMain.handle('pattern:validateGlobPattern', async (_event, pattern) => {
+  return await validateGlobPatternUseCase.execute(pattern);
+});
+
+ipcMain.handle('pattern:findFilesMatchingPattern', async (_event, pattern) => {
+  return await findFilesMatchingPatternUseCase.execute(pattern);
 });
 
 // IPC Handlers for Git Operations

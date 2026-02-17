@@ -54,6 +54,9 @@ contextBridge.exposeInMainWorld('api', {
   pattern: {
     generateInstructions: (agent: any, patterns?: string[]) =>
       ipcRenderer.invoke('pattern:generateInstructions', agent, patterns),
+    analyzeRepository: () => ipcRenderer.invoke('pattern:analyzeRepository'),
+    validateGlobPattern: (pattern: string) => ipcRenderer.invoke('pattern:validateGlobPattern', pattern),
+    findFilesMatchingPattern: (pattern: string) => ipcRenderer.invoke('pattern:findFilesMatchingPattern', pattern),
   },
 
   // Git operations

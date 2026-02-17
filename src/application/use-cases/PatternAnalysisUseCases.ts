@@ -1,4 +1,5 @@
 import { Agent } from '@domain/entities/Agent';
+import { RepositoryAnalyzerService, RepositoryAnalysis } from '@infrastructure/services/RepositoryAnalyzerService';
 
 export interface PatternAnalysisResult {
   patterns: string[];
@@ -94,5 +95,29 @@ export class GenerateCopilotInstructionsUseCase {
     }
 
     return instructions;
+  }
+}
+
+export class AnalyzeRepositoryUseCase {
+  constructor(private repositoryAnalyzer: RepositoryAnalyzerService) {}
+
+  async execute(): Promise<RepositoryAnalysis> {
+    return await this.repositoryAnalyzer.analyzeRepository();
+  }
+}
+
+export class ValidateGlobPatternUseCase {
+  constructor(private repositoryAnalyzer: RepositoryAnalyzerService) {}
+
+  async execute(pattern: string): Promise<boolean> {
+    return this.repositoryAnalyzer.validateGlobPattern(pattern);
+  }
+}
+
+export class FindFilesMatchingPatternUseCase {
+  constructor(private repositoryAnalyzer: RepositoryAnalyzerService) {}
+
+  async execute(pattern: string): Promise<string[]> {
+    return await this.repositoryAnalyzer.findFilesMatchingPattern(pattern);
   }
 }

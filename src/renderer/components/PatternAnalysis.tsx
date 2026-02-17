@@ -14,12 +14,23 @@ interface AnalysisResult {
   instructions: string;
 }
 
+interface RepositoryAnalysis {
+  languages: { [key: string]: number };
+  frameworks: string[];
+  patterns: string[];
+  suggestedInstructions: string;
+}
+
 function PatternAnalysis() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [codebasePatterns, setCodebasePatterns] = useState<string>('');
+  const [globPattern, setGlobPattern] = useState<string>('**/*.instructions.md');
+  const [matchingFiles, setMatchingFiles] = useState<string[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [repoAnalysis, setRepoAnalysis] = useState<RepositoryAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzingRepo, setAnalyzingRepo] = useState(false);
 
   useEffect(() => {
     loadAgents();
@@ -31,6 +42,40 @@ function PatternAnalysis() {
       setAgents(loadedAgents);
     } catch (error) {
       console.error('Failed to load agents:', error);
+    }
+  };
+
+  const analyzeRepository = async () => {
+    setAnalyzingRepo(true);
+    try {
+      const result = await (window as any).api.pattern.analyzeRepository();
+      setRepoAnalysis(result);
+      
+      // Pre-fill codebase patterns with detected patterns
+      if (result.patterns.length > 0) {
+        setCodebasePatterns(result.patterns.join('\n'));
+      }
+    } catch (error) {
+      console.error('Failed to analyze repository:', error);
+      alert('Failed to analyze repository');
+    } finally {
+      setAnalyzingRepo(false);
+    }
+  };
+
+  const findMatchingFiles = async () => {
+    try {
+      const isValid = await (window as any).api.pattern.validateGlobPattern(globPattern);
+      if (!isValid) {
+        alert('Invalid glob pattern');
+        return;
+      }
+
+      const files = await (window as any).api.pattern.findFilesMatchingPattern(globPattern);
+      setMatchingFiles(files);
+    } catch (error) {
+      console.error('Failed to find matching files:', error);
+      alert('Failed to find matching files');
     }
   };
 
@@ -82,6 +127,78 @@ function PatternAnalysis() {
       </div>
 
       <div className="analysis-config">
+        <div className="form-section">
+          <h3>🔍 Repository Analysis</h3>
+          <p className="help-text">Automatically detect languages, frameworks, and patterns</p>
+          <button
+            className="btn btn-primary"
+            onClick={analyzeRepository}
+            disabled={analyzingRepo}
+          >
+            {analyzingRepo ? '⏳ Analyzing Repository...' : '🔍 Analyze Repository'}
+          </button>
+
+          {repoAnalysis && (
+            <div className="repo-analysis-results">
+              <div className="analysis-group">
+                <h4>Languages Detected:</h4>
+                <div className="tags">
+                  {Object.keys(repoAnalysis.languages).map(lang => (
+                    <span key={lang} className="tag">{lang}</span>
+                  ))}
+                </div>
+              </div>
+
+              {repoAnalysis.frameworks.length > 0 && (
+                <div className="analysis-group">
+                  <h4>Frameworks & Tools:</h4>
+                  <div className="tags">
+                    {repoAnalysis.frameworks.map(fw => (
+                      <span key={fw} className="tag tag-framework">{fw}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="analysis-group">
+                <h4>Detected Patterns:</h4>
+                <ul className="pattern-list">
+                  {repoAnalysis.patterns.map((pattern, idx) => (
+                    <li key={idx}>{pattern}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="form-section">
+          <h3>📂 Glob Pattern Selector</h3>
+          <p className="help-text">Find instruction files matching a pattern</p>
+          <div className="glob-input-group">
+            <input
+              type="text"
+              value={globPattern}
+              onChange={(e) => setGlobPattern(e.target.value)}
+              placeholder="**/*.instructions.md"
+            />
+            <button className="btn" onClick={findMatchingFiles}>
+              Find Files
+            </button>
+          </div>
+
+          {matchingFiles.length > 0 && (
+            <div className="matching-files">
+              <h4>Matching Files ({matchingFiles.length}):</h4>
+              <ul>
+                {matchingFiles.map((file, idx) => (
+                  <li key={idx}>{file}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
         <div className="form-group">
           <label>Select Agent</label>
           <select
