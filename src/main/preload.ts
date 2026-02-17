@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('api', {
     getAll: () => ipcRenderer.invoke('skill:getAll'),
     exportToMd: (skill: any) => ipcRenderer.invoke('skill:exportToMd', skill),
     exportToYaml: (skill: any) => ipcRenderer.invoke('skill:exportToYaml', skill),
+    createDirectory: (skill: any, basePath: string) => ipcRenderer.invoke('skill:createDirectory', skill, basePath),
+    validateDescription: (description: string) => ipcRenderer.invoke('skill:validateDescription', description),
   },
 
   // MCP Config operations
@@ -28,6 +30,8 @@ contextBridge.exposeInMainWorld('api', {
     load: () => ipcRenderer.invoke('mcp:load'),
     save: (config: any) => ipcRenderer.invoke('mcp:save', config),
     export: () => ipcRenderer.invoke('mcp:export'),
+    getAvailableTools: () => ipcRenderer.invoke('mcp:getAvailableTools'),
+    searchTools: (query: string) => ipcRenderer.invoke('mcp:searchTools', query),
   },
 
   // Secure storage operations
@@ -50,5 +54,12 @@ contextBridge.exposeInMainWorld('api', {
   pattern: {
     generateInstructions: (agent: any, patterns?: string[]) =>
       ipcRenderer.invoke('pattern:generateInstructions', agent, patterns),
+  },
+
+  // Git operations
+  git: {
+    getStatus: () => ipcRenderer.invoke('git:getStatus'),
+    atomicCommit: (options: any) => ipcRenderer.invoke('git:atomicCommit', options),
+    isRepository: () => ipcRenderer.invoke('git:isRepository'),
   },
 });

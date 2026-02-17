@@ -25,6 +25,8 @@ function SkillWizard() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [currentSkill, setCurrentSkill] = useState<Skill | null>(null);
   const [step, setStep] = useState<'metadata' | 'markdown' | 'yaml' | 'scripts'>('metadata');
+  const [descriptionValidation, setDescriptionValidation] = useState<{ score: number; suggestions: string[] } | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     loadSkills();
@@ -116,6 +118,36 @@ function SkillWizard() {
     }
   };
 
+  const createDirectory = async () => {
+    if (!currentSkill) return;
+
+    try {
+      // Ask user for directory path
+      const basePath = prompt('Enter the base path where the skill directory should be created:', '.github/skills');
+      if (!basePath) return;
+
+      await (window as any).api.skill.createDirectory(currentSkill, basePath);
+      alert(`Skill directory created successfully at ${basePath}/${currentSkill.metadata.name.toLowerCase().replace(/\s+/g, '-')}`);
+    } catch (error) {
+      console.error('Failed to create skill directory:', error);
+      alert('Failed to create skill directory. Check console for details.');
+    }
+  };
+
+  const validateDescription = async () => {
+    if (!currentSkill || !currentSkill.metadata.description) return;
+
+    try {
+      setIsValidating(true);
+      const validation = await (window as any).api.skill.validateDescription(currentSkill.metadata.description);
+      setDescriptionValidation(validation);
+    } catch (error) {
+      console.error('Failed to validate description:', error);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const updateField = (path: string[], value: any) => {
     if (!currentSkill) return;
 
@@ -127,6 +159,11 @@ function SkillWizard() {
     }
     obj[path[path.length - 1]] = value;
     setCurrentSkill(updated);
+
+    // Auto-validate description when it changes
+    if (path.join('.') === 'metadata.description' && value) {
+      validateDescription();
+    }
   };
 
   const addScript = () => {
@@ -182,6 +219,9 @@ function SkillWizard() {
                 <div className="editor-actions">
                   <button className="btn btn-primary" onClick={saveSkill}>
                     Save
+                  </button>
+                  <button className="btn" onClick={createDirectory}>
+                    📁 Create Directory
                   </button>
                   <button className="btn" onClick={exportToMd}>
                     Export .md
@@ -249,6 +289,21 @@ function SkillWizard() {
                         onChange={(e) => updateField(['metadata', 'description'], e.target.value)}
                         rows={3}
                       />
+                      {descriptionValidation && (
+                        <div className={`validation-result ${descriptionValidation.score >= 70 ? 'good' : 'needs-improvement'}`}>
+                          <div className="validation-score">
+                            Score: {descriptionValidation.score}/100
+                          </div>
+                          {descriptionValidation.suggestions.length > 0 && (
+                            <ul className="validation-suggestions">
+                              {descriptionValidation.suggestions.map((suggestion, idx) => (
+                                <li key={idx}>{suggestion}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                      {isValidating && <div className="validating">Validating description...</div>}
                     </div>
                     <div className="form-group">
                       <label>Category</label>

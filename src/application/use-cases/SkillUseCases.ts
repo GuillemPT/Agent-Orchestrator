@@ -57,3 +57,19 @@ export class ExportSkillToYamlUseCase {
     return await this.skillRepository.exportToYaml(skill);
   }
 }
+
+export class CreateSkillDirectoryUseCase {
+  constructor(private skillRepository: ISkillRepository) {}
+
+  async execute(skill: Skill, basePath: string): Promise<void> {
+    return await this.skillRepository.createSkillDirectory(skill, basePath);
+  }
+}
+
+export class ValidateSkillDescriptionUseCase {
+  constructor(private skillRepository: ISkillRepository) {}
+
+  async execute(description: string): Promise<{ score: number; suggestions: string[] }> {
+    return await this.skillRepository.validateDescription(description);
+  }
+}

@@ -13,6 +13,7 @@ function Sidebar({ currentView, onViewChange }: SidebarProps) {
     { view: 'mcp', label: 'MCP Config', icon: '🔧' },
     { view: 'sync', label: 'Sync', icon: '🔄' },
     { view: 'patterns', label: 'Pattern Analysis', icon: '📊' },
+    { view: 'git', label: 'Git Integration', icon: '🌿' },
   ];
 
   return (

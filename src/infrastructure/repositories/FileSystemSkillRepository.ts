@@ -63,7 +63,20 @@ export class FileSystemSkillRepository implements ISkillRepository {
   }
 
   async exportToSkillMd(skill: Skill): Promise<string> {
-    let markdown = `# ${skill.metadata.name}\n\n`;
+    // Generate YAML frontmatter
+    let markdown = '---\n';
+    markdown += `name: ${skill.metadata.name}\n`;
+    markdown += `version: ${skill.metadata.version}\n`;
+    markdown += `description: ${skill.metadata.description}\n`;
+    if (skill.metadata.category) {
+      markdown += `category: ${skill.metadata.category}\n`;
+    }
+    markdown += `created: ${skill.createdAt.toISOString()}\n`;
+    markdown += `updated: ${skill.updatedAt.toISOString()}\n`;
+    markdown += '---\n\n';
+
+    // Add main content
+    markdown += `# ${skill.metadata.name}\n\n`;
     markdown += `**Version:** ${skill.metadata.version}\n\n`;
     markdown += `**Description:** ${skill.metadata.description}\n\n`;
 
@@ -105,5 +118,92 @@ export class FileSystemSkillRepository implements ISkillRepository {
     }
 
     return yaml.stringify(yamlData);
+  }
+
+  async createSkillDirectory(skill: Skill, basePath: string): Promise<void> {
+    try {
+      const skillDir = path.join(basePath, skill.metadata.name.toLowerCase().replace(/\s+/g, '-'));
+      
+      // Create main skill directory
+      await fs.mkdir(skillDir, { recursive: true });
+      
+      // Create subdirectories
+      await fs.mkdir(path.join(skillDir, 'scripts'), { recursive: true });
+      await fs.mkdir(path.join(skillDir, 'references'), { recursive: true });
+      await fs.mkdir(path.join(skillDir, 'assets'), { recursive: true });
+      
+      // Generate and save SKILL.md with YAML frontmatter
+      const skillMd = await this.exportToSkillMd(skill);
+      await fs.writeFile(path.join(skillDir, 'SKILL.md'), skillMd, 'utf-8');
+      
+      // Save scripts to scripts directory
+      for (const script of skill.scripts) {
+        const scriptPath = script.path || `script-${skill.scripts.indexOf(script)}.${this.getScriptExtension(script.language)}`;
+        await fs.writeFile(
+          path.join(skillDir, 'scripts', scriptPath),
+          script.content,
+          'utf-8'
+        );
+      }
+      
+      // Create README in references
+      await fs.writeFile(
+        path.join(skillDir, 'references', 'README.md'),
+        '# References\n\nAdd reference documentation and materials here.\n',
+        'utf-8'
+      );
+      
+    } catch (error) {
+      console.error('Error creating skill directory:', error);
+      throw error;
+    }
+  }
+
+  private getScriptExtension(language: string): string {
+    const extensions: Record<string, string> = {
+      bash: 'sh',
+      python: 'py',
+      javascript: 'js',
+      typescript: 'ts',
+      powershell: 'ps1',
+    };
+    return extensions[language.toLowerCase()] || 'txt';
+  }
+
+  async validateDescription(description: string): Promise<{ score: number; suggestions: string[] }> {
+    // Basic validation - could be enhanced with LLM call
+    const suggestions: string[] = [];
+    let score = 100;
+
+    // Check length
+    if (description.length < 20) {
+      score -= 30;
+      suggestions.push('Description is too short. Provide more detail (minimum 20 characters).');
+    }
+
+    if (description.length > 200) {
+      score -= 10;
+      suggestions.push('Description is quite long. Consider being more concise.');
+    }
+
+    // Check for specific keywords that improve discoverability
+    const keywords = ['create', 'manage', 'analyze', 'automate', 'test', 'deploy', 'configure'];
+    const hasActionVerb = keywords.some(keyword => description.toLowerCase().includes(keyword));
+    
+    if (!hasActionVerb) {
+      score -= 20;
+      suggestions.push('Consider starting with an action verb (e.g., create, manage, analyze) to improve clarity.');
+    }
+
+    // Check for technical terms
+    if (!/[A-Z]{2,}/.test(description) && !/\b(API|SDK|CLI|UI|UX)\b/.test(description)) {
+      score -= 10;
+      suggestions.push('Consider including relevant technical terms or acronyms for better discoverability.');
+    }
+
+    return {
+      score: Math.max(0, score),
+      suggestions,
+    };
   }
 }

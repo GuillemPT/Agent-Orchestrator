@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ToolSelector from './ToolSelector';
 import '../styles/AgentEditor.css';
 
 interface Agent {
@@ -28,6 +29,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [currentAgent, setCurrentAgent] = useState<Agent | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showToolSelector, setShowToolSelector] = useState(false);
 
   useEffect(() => {
     loadAgents();
@@ -253,16 +255,38 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
                 <h4>MCP Configuration</h4>
                 <div className="form-group">
                   <label>Target</label>
-                  <input
-                    type="text"
+                  <select
                     value={currentAgent.mcpConfig.target || ''}
                     onChange={(e) => updateField(['mcpConfig', 'target'], e.target.value)}
                     disabled={!isEditing}
-                    placeholder="e.g., workspace, user, global"
-                  />
+                  >
+                    <option value="">Select target environment</option>
+                    <option value="vscode">VS Code</option>
+                    <option value="github">GitHub.com</option>
+                    <option value="workspace">Workspace</option>
+                    <option value="user">User</option>
+                    <option value="global">Global</option>
+                  </select>
                 </div>
                 <div className="form-group">
                   <label>Tools</label>
+                  {isEditing && (
+                    <button 
+                      className="btn btn-sm" 
+                      onClick={() => setShowToolSelector(!showToolSelector)}
+                      style={{ marginBottom: '0.5rem' }}
+                    >
+                      {showToolSelector ? '✕ Hide' : '🔧 Select from Registry'}
+                    </button>
+                  )}
+                  
+                  {showToolSelector && isEditing && (
+                    <ToolSelector
+                      selectedTools={currentAgent.mcpConfig.tools || []}
+                      onToolsChange={(tools) => updateField(['mcpConfig', 'tools'], tools)}
+                    />
+                  )}
+                  
                   {currentAgent.mcpConfig.tools?.map((tool, index) => (
                     <div key={index} className="tool-item">
                       <input
@@ -284,7 +308,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
                   ))}
                   {isEditing && (
                     <button className="btn btn-sm" onClick={addTool}>
-                      + Add Tool
+                      + Add Tool Manually
                     </button>
                   )}
                 </div>

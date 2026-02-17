@@ -5,6 +5,8 @@ import { FileSystemSkillRepository } from '../infrastructure/repositories/FileSy
 import { FileSystemMCPRepository } from '../infrastructure/repositories/FileSystemMCPRepository';
 import { KeytarSecureStorage } from '../infrastructure/services/KeytarSecureStorage';
 import { CopilotSyncService } from '../infrastructure/services/CopilotSyncService';
+import { MCPToolsService } from '../infrastructure/services/MCPToolsService';
+import { GitService } from '../infrastructure/services/GitService';
 import {
   CreateAgentUseCase,
   UpdateAgentUseCase,
@@ -20,17 +22,26 @@ import {
   GetAllSkillsUseCase,
   ExportSkillToMdUseCase,
   ExportSkillToYamlUseCase,
+  CreateSkillDirectoryUseCase,
+  ValidateSkillDescriptionUseCase,
 } from '../application/use-cases/SkillUseCases';
 import {
   LoadMCPConfigUseCase,
   SaveMCPConfigUseCase,
   ExportMCPConfigUseCase,
+  GetAvailableMCPToolsUseCase,
+  SearchMCPToolsUseCase,
 } from '../application/use-cases/MCPUseCases';
 import {
   SyncCopilotDirectoriesUseCase,
   DetectChangesUseCase,
 } from '../application/use-cases/SyncUseCases';
 import { GenerateCopilotInstructionsUseCase } from '../application/use-cases/PatternAnalysisUseCases';
+import {
+  GetGitStatusUseCase,
+  AtomicCommitUseCase,
+  CheckGitRepositoryUseCase,
+} from '../application/use-cases/GitUseCases';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -41,6 +52,8 @@ const skillRepository = new FileSystemSkillRepository(dataDir);
 const mcpRepository = new FileSystemMCPRepository(dataDir);
 const secureStorage = new KeytarSecureStorage();
 const syncService = new CopilotSyncService();
+const mcpToolsService = new MCPToolsService();
+const gitService = new GitService();
 
 // Initialize use cases
 const createAgentUseCase = new CreateAgentUseCase(agentRepository);
@@ -56,15 +69,23 @@ const deleteSkillUseCase = new DeleteSkillUseCase(skillRepository);
 const getAllSkillsUseCase = new GetAllSkillsUseCase(skillRepository);
 const exportSkillToMdUseCase = new ExportSkillToMdUseCase(skillRepository);
 const exportSkillToYamlUseCase = new ExportSkillToYamlUseCase(skillRepository);
+const createSkillDirectoryUseCase = new CreateSkillDirectoryUseCase(skillRepository);
+const validateSkillDescriptionUseCase = new ValidateSkillDescriptionUseCase(skillRepository);
 
 const loadMCPConfigUseCase = new LoadMCPConfigUseCase(mcpRepository);
 const saveMCPConfigUseCase = new SaveMCPConfigUseCase(mcpRepository);
 const exportMCPConfigUseCase = new ExportMCPConfigUseCase(mcpRepository);
+const getAvailableMCPToolsUseCase = new GetAvailableMCPToolsUseCase(mcpToolsService);
+const searchMCPToolsUseCase = new SearchMCPToolsUseCase(mcpToolsService);
 
 const syncCopilotDirectoriesUseCase = new SyncCopilotDirectoriesUseCase(syncService);
 const detectChangesUseCase = new DetectChangesUseCase(syncService);
 
 const generateCopilotInstructionsUseCase = new GenerateCopilotInstructionsUseCase();
+
+const getGitStatusUseCase = new GetGitStatusUseCase(gitService);
+const atomicCommitUseCase = new AtomicCommitUseCase(gitService);
+const checkGitRepositoryUseCase = new CheckGitRepositoryUseCase(gitService);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -158,6 +179,14 @@ ipcMain.handle('skill:exportToYaml', async (_event, skill) => {
   return await exportSkillToYamlUseCase.execute(skill);
 });
 
+ipcMain.handle('skill:createDirectory', async (_event, skill, basePath) => {
+  return await createSkillDirectoryUseCase.execute(skill, basePath);
+});
+
+ipcMain.handle('skill:validateDescription', async (_event, description) => {
+  return await validateSkillDescriptionUseCase.execute(description);
+});
+
 // IPC Handlers for MCP Config
 ipcMain.handle('mcp:load', async () => {
   return await loadMCPConfigUseCase.execute();
@@ -169,6 +198,14 @@ ipcMain.handle('mcp:save', async (_event, config) => {
 
 ipcMain.handle('mcp:export', async () => {
   return await exportMCPConfigUseCase.execute();
+});
+
+ipcMain.handle('mcp:getAvailableTools', async () => {
+  return await getAvailableMCPToolsUseCase.execute();
+});
+
+ipcMain.handle('mcp:searchTools', async (_event, query) => {
+  return await searchMCPToolsUseCase.execute(query);
 });
 
 // IPC Handlers for Secure Storage
@@ -196,4 +233,17 @@ ipcMain.handle('sync:detectChanges', async () => {
 // IPC Handlers for Pattern Analysis
 ipcMain.handle('pattern:generateInstructions', async (_event, agent, patterns) => {
   return await generateCopilotInstructionsUseCase.execute(agent, patterns);
+});
+
+// IPC Handlers for Git Operations
+ipcMain.handle('git:getStatus', async () => {
+  return await getGitStatusUseCase.execute();
+});
+
+ipcMain.handle('git:atomicCommit', async (_event, options) => {
+  return await atomicCommitUseCase.execute(options);
+});
+
+ipcMain.handle('git:isRepository', async () => {
+  return await checkGitRepositoryUseCase.execute();
 });

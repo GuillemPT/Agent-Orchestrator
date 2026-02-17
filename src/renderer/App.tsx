@@ -6,8 +6,9 @@ import SkillWizard from './components/SkillWizard';
 import MCPConfig from './components/MCPConfig';
 import SyncPanel from './components/SyncPanel';
 import PatternAnalysis from './components/PatternAnalysis';
+import GitPanel from './components/GitPanel';
 
-export type ViewType = 'agents' | 'skills' | 'mcp' | 'sync' | 'patterns';
+export type ViewType = 'agents' | 'skills' | 'mcp' | 'sync' | 'patterns' | 'git';
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewType>('agents');
@@ -27,6 +28,7 @@ function App() {
         {currentView === 'mcp' && <MCPConfig />}
         {currentView === 'sync' && <SyncPanel />}
         {currentView === 'patterns' && <PatternAnalysis />}
+        {currentView === 'git' && <GitPanel />}
       </main>
     </div>
   );
