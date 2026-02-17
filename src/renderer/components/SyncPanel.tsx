@@ -9,6 +9,7 @@ interface SyncChanges {
 function SyncPanel() {
   const [changes, setChanges] = useState<SyncChanges | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [copyingSkills, setCopyingSkills] = useState(false);
   const [direction, setDirection] = useState<'toGithub' | 'toHome' | 'bidirectional'>('bidirectional');
   const [conflictResolution, setConflictResolution] = useState<'newer' | 'github' | 'home'>('newer');
 
@@ -39,6 +40,28 @@ function SyncPanel() {
       alert('Sync failed. Check console for details.');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const copySkillsToRepo = async () => {
+    if (!confirm('This will copy all skills from ~/.copilot/skills to .github/skills. Continue?')) {
+      return;
+    }
+
+    setCopyingSkills(true);
+    try {
+      await (window as any).api.sync.syncDirectories({
+        direction: 'toGithub',
+        conflictResolution: 'home',
+        specificPath: 'skills',
+      });
+      alert('Skills copied to repository successfully!');
+      await detectChanges();
+    } catch (error) {
+      console.error('Failed to copy skills:', error);
+      alert('Failed to copy skills. Check console for details.');
+    } finally {
+      setCopyingSkills(false);
     }
   };
 
@@ -124,6 +147,22 @@ function SyncPanel() {
         <button className="btn btn-primary" onClick={performSync} disabled={syncing}>
           {syncing ? '⏳ Syncing...' : '🔄 Sync Now'}
         </button>
+      </div>
+
+      <div className="quick-actions">
+        <h3>⚡ Quick Actions</h3>
+        <div className="quick-action-buttons">
+          <button 
+            className="btn btn-primary" 
+            onClick={copySkillsToRepo} 
+            disabled={copyingSkills || syncing}
+          >
+            {copyingSkills ? '⏳ Copying...' : '📦 Copy Skills to Repository'}
+          </button>
+          <p className="help-text">
+            Copy all skills from ~/.copilot/skills to .github/skills in one click
+          </p>
+        </div>
       </div>
 
       {changes && (
