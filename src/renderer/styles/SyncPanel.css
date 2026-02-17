@@ -1,0 +1,145 @@
+.sync-panel {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.panel-header {
+  margin-bottom: 32px;
+}
+
+.panel-header h2 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.panel-header .subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.sync-config {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.config-section {
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.config-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.radio-group input[type='radio'] {
+  margin-right: 8px;
+  width: auto;
+}
+
+.sync-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.changes-overview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.change-section {
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.change-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.file-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.file-item {
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.file-list .empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.info-section {
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.info-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.info-section ul {
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.info-section li {
+  margin-bottom: 8px;
+  padding-left: 20px;
+  position: relative;
+}
+
+.info-section li::before {
+  content: '•';
+  position: absolute;
+  left: 8px;
+  color: var(--accent-blue);
+}
+
+.info-section ul ul {
+  margin-top: 8px;
+  padding-left: 16px;
+}
