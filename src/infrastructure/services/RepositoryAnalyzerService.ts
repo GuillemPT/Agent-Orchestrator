@@ -277,22 +277,30 @@ export class RepositoryAnalyzerService {
 
   /**
    * Find files matching glob pattern
+   * Note: This is a simplified implementation. For production, consider using
+   * a dedicated glob library like 'fast-glob' or 'minimatch' for better accuracy
    */
   async findFilesMatchingPattern(pattern: string): Promise<string[]> {
-    // Simple glob matching - in production, use a proper glob library
     const files: string[] = [];
     
-    // Convert glob pattern to regex (simplified)
-    const regexPattern = pattern
-      .replace(/\./g, '\\.')
-      .replace(/\*/g, '.*')
-      .replace(/\?/g, '.');
+    // For now, do a simple substring match for *.md patterns
+    // TODO: Implement proper glob matching or integrate a glob library
+    const isSimpleMdPattern = pattern.endsWith('*.md') || pattern.includes('*.instructions.md');
     
-    const regex = new RegExp(`^${regexPattern}$`);
-
     await this.walkDirectory(this.repoPath, async (filePath) => {
       const relativePath = path.relative(this.repoPath, filePath);
-      if (regex.test(relativePath)) {
+      
+      if (isSimpleMdPattern && relativePath.endsWith('.md')) {
+        // For *.instructions.md patterns
+        if (pattern.includes('.instructions.md')) {
+          if (relativePath.endsWith('.instructions.md')) {
+            files.push(relativePath);
+          }
+        } else {
+          files.push(relativePath);
+        }
+      } else if (relativePath.includes(pattern.replace(/\*/g, ''))) {
+        // Fallback: simple substring match
         files.push(relativePath);
       }
     });

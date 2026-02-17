@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -95,8 +96,9 @@ export class GitService {
       throw new Error('Not a Git repository');
     }
 
-    const filesArg = files.join(' ');
-    await execAsync(`git add ${filesArg}`, { cwd: this.repoPath });
+    // Use git add with proper argument separation to avoid injection
+    const args = ['add', ...files];
+    await execAsync(`git ${args.map(arg => JSON.stringify(arg)).join(' ')}`, { cwd: this.repoPath });
   }
 
   /**
@@ -108,9 +110,20 @@ export class GitService {
       throw new Error('Not a Git repository');
     }
 
-    // Escape quotes in commit message
-    const escapedMessage = message.replace(/"/g, '\\"');
-    await execAsync(`git commit -m "${escapedMessage}"`, { cwd: this.repoPath });
+    // Use -F flag to pass message via stdin to avoid injection
+    const tempFile = path.join(this.repoPath, '.git', 'COMMIT_EDITMSG_TEMP');
+    await fs.writeFile(tempFile, message, 'utf-8');
+    
+    try {
+      await execAsync(`git commit -F ${JSON.stringify(tempFile)}`, { cwd: this.repoPath });
+    } finally {
+      // Clean up temp file
+      try {
+        await fs.unlink(tempFile);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   }
 
   /**

@@ -136,8 +136,7 @@ function ToolSelector({ selectedTools, onToolsChange }: ToolSelectorProps) {
                 <input
                   type="checkbox"
                   checked={tool.enabled}
-                  onChange={() => {}}
-                  onClick={(e) => e.stopPropagation()}
+                  readOnly
                 />
               </div>
               <div className="tool-description">{tool.description}</div>
