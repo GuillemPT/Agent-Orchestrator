@@ -61,22 +61,25 @@ fi
 echo "=== Validating $MCP_FILE ==="
 
 # Check top-level key
-if ! python3 -c "
+if ! python3 - "$MCP_FILE" << 'PY'
 import json, sys
-with open('$MCP_FILE') as f:
+
+mcp_path = sys.argv[1]
+with open(mcp_path) as f:
     data = json.load(f)
 if 'mcpServers' not in data:
     print('❌ Missing top-level key: mcpServers')
     sys.exit(1)
 for name, cfg in data['mcpServers'].items():
     if 'command' not in cfg:
-        print(f'❌ Server \"{name}\" missing required field: command')
+        print(f'❌ Server "{name}" missing required field: command')
         sys.exit(1)
     if not isinstance(cfg.get('args', []), list):
-        print(f'❌ Server \"{name}\" args must be an array')
+        print(f'❌ Server "{name}" args must be an array')
         sys.exit(1)
 print('✅ Schema valid')
-"; then
+PY
+then
   exit 1
 fi
 
