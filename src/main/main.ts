@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { FileSystemAgentRepository } from '../infrastructure/repositories/FileSystemAgentRepository';
 import { FileSystemSkillRepository } from '../infrastructure/repositories/FileSystemSkillRepository';
 import { FileSystemMCPRepository } from '../infrastructure/repositories/FileSystemMCPRepository';
@@ -32,6 +33,11 @@ import {
   ExportMCPConfigUseCase,
   GetAvailableMCPToolsUseCase,
   SearchMCPToolsUseCase,
+  GetAllMCPProjectsUseCase,
+  CreateMCPProjectUseCase,
+  UpdateMCPProjectUseCase,
+  DeleteMCPProjectUseCase,
+  DeployMCPProjectUseCase,
 } from '../application/use-cases/MCPUseCases';
 import {
   SyncCopilotDirectoriesUseCase,
@@ -43,6 +49,35 @@ import {
   AtomicCommitUseCase,
   CheckGitRepositoryUseCase,
 } from '../application/use-cases/GitUseCases';
+import {
+  SaveGitHubTokenUseCase,
+  GetGitHubUserUseCase,
+  ClearGitHubTokenUseCase,
+  ListGitHubReposUseCase,
+  CreatePullRequestUseCase,
+  GetMarketplaceGistsUseCase,
+  GetGistUseCase,
+  PublishGistUseCase,
+} from '../application/use-cases/GitHubUseCases';
+import { GitHubService } from '../infrastructure/services/GitHubService';
+import { GitProviderService } from '../infrastructure/services/GitProviderService';
+import {
+  GetConnectedAccountsUseCase,
+  GetProviderSettingsUseCase,
+  SetProviderClientIdUseCase,
+  StartDeviceFlowUseCase,
+  CompleteDeviceFlowUseCase,
+  ConnectWithAppPasswordUseCase,
+  DisconnectProviderUseCase,
+  ListReposUseCase,
+  PushFilesUseCase,
+  CreatePRUseCase,
+  ListMarketplaceSnippetsUseCase,
+  GetSnippetUseCase,
+  PublishSnippetUseCase,
+} from '../application/use-cases/GitProviderUseCases';
+import { PLATFORM_OUTPUT_PATHS } from '../domain/entities/Platform';
+import type { Platform } from '../domain/entities/Platform';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -56,6 +91,8 @@ const syncService = new CopilotSyncService();
 const mcpToolsService = new MCPToolsService();
 const gitService = new GitService();
 const repositoryAnalyzer = new RepositoryAnalyzerService();
+const githubService = new GitHubService(secureStorage);
+const gitProviderService = new GitProviderService(secureStorage, dataDir);
 
 // Initialize use cases
 const createAgentUseCase = new CreateAgentUseCase(agentRepository);
@@ -80,6 +117,12 @@ const exportMCPConfigUseCase = new ExportMCPConfigUseCase(mcpRepository);
 const getAvailableMCPToolsUseCase = new GetAvailableMCPToolsUseCase(mcpToolsService);
 const searchMCPToolsUseCase = new SearchMCPToolsUseCase(mcpToolsService);
 
+const getAllMCPProjectsUseCase = new GetAllMCPProjectsUseCase(mcpRepository);
+const createMCPProjectUseCase = new CreateMCPProjectUseCase(mcpRepository);
+const updateMCPProjectUseCase = new UpdateMCPProjectUseCase(mcpRepository);
+const deleteMCPProjectUseCase = new DeleteMCPProjectUseCase(mcpRepository);
+const deployMCPProjectUseCase = new DeployMCPProjectUseCase(mcpRepository);
+
 const syncCopilotDirectoriesUseCase = new SyncCopilotDirectoriesUseCase(syncService);
 const detectChangesUseCase = new DetectChangesUseCase(syncService);
 
@@ -91,6 +134,30 @@ const findFilesMatchingPatternUseCase = new FindFilesMatchingPatternUseCase(repo
 const getGitStatusUseCase = new GetGitStatusUseCase(gitService);
 const atomicCommitUseCase = new AtomicCommitUseCase(gitService);
 const checkGitRepositoryUseCase = new CheckGitRepositoryUseCase(gitService);
+
+const saveGitHubTokenUseCase = new SaveGitHubTokenUseCase(githubService);
+const getGitHubUserUseCase = new GetGitHubUserUseCase(githubService);
+const clearGitHubTokenUseCase = new ClearGitHubTokenUseCase(githubService);
+const listGitHubReposUseCase = new ListGitHubReposUseCase(githubService);
+const createPullRequestUseCase = new CreatePullRequestUseCase(githubService);
+const getMarketplaceGistsUseCase = new GetMarketplaceGistsUseCase(githubService);
+const getGistUseCase = new GetGistUseCase(githubService);
+const publishGistUseCase = new PublishGistUseCase(githubService);
+
+// Multi-provider use cases
+const getConnectedAccountsUseCase = new GetConnectedAccountsUseCase(gitProviderService);
+const getProviderSettingsUseCase = new GetProviderSettingsUseCase(gitProviderService);
+const setProviderClientIdUseCase = new SetProviderClientIdUseCase(gitProviderService);
+const startDeviceFlowUseCase = new StartDeviceFlowUseCase(gitProviderService);
+const completeDeviceFlowUseCase = new CompleteDeviceFlowUseCase(gitProviderService);
+const connectWithAppPasswordUseCase = new ConnectWithAppPasswordUseCase(gitProviderService);
+const disconnectProviderUseCase = new DisconnectProviderUseCase(gitProviderService);
+const listReposUseCase = new ListReposUseCase(gitProviderService);
+const pushFilesUseCase = new PushFilesUseCase(gitProviderService);
+const createPRUseCase = new CreatePRUseCase(gitProviderService);
+const listMarketplaceSnippetsUseCase = new ListMarketplaceSnippetsUseCase(gitProviderService);
+const getSnippetUseCase = new GetSnippetUseCase(gitProviderService);
+const publishSnippetUseCase = new PublishSnippetUseCase(gitProviderService);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -155,8 +222,8 @@ ipcMain.handle('agent:getById', async (_event, id) => {
   return await getAgentByIdUseCase.execute(id);
 });
 
-ipcMain.handle('agent:exportToMd', async (_event, agent) => {
-  return await exportAgentToMdUseCase.execute(agent);
+ipcMain.handle('agent:exportToMd', async (_event, agent, platform) => {
+  return await exportAgentToMdUseCase.execute(agent, platform);
 });
 
 // IPC Handlers for Skills
@@ -176,8 +243,8 @@ ipcMain.handle('skill:getAll', async () => {
   return await getAllSkillsUseCase.execute();
 });
 
-ipcMain.handle('skill:exportToMd', async (_event, skill) => {
-  return await exportSkillToMdUseCase.execute(skill);
+ipcMain.handle('skill:exportToMd', async (_event, skill, platform) => {
+  return await exportSkillToMdUseCase.execute(skill, platform);
 });
 
 ipcMain.handle('skill:exportToYaml', async (_event, skill) => {
@@ -211,6 +278,27 @@ ipcMain.handle('mcp:getAvailableTools', async () => {
 
 ipcMain.handle('mcp:searchTools', async (_event, query) => {
   return await searchMCPToolsUseCase.execute(query);
+});
+
+// IPC Handlers for MCP Project Configs
+ipcMain.handle('mcp:getAllProjects', async () => {
+  return await getAllMCPProjectsUseCase.execute();
+});
+
+ipcMain.handle('mcp:createProject', async (_event, data) => {
+  return await createMCPProjectUseCase.execute(data);
+});
+
+ipcMain.handle('mcp:updateProject', async (_event, id, updates) => {
+  return await updateMCPProjectUseCase.execute(id, updates);
+});
+
+ipcMain.handle('mcp:deleteProject', async (_event, id) => {
+  return await deleteMCPProjectUseCase.execute(id);
+});
+
+ipcMain.handle('mcp:deployProject', async (_event, config) => {
+  return await deployMCPProjectUseCase.execute(config);
 });
 
 // IPC Handlers for Secure Storage
@@ -263,4 +351,111 @@ ipcMain.handle('git:atomicCommit', async (_event, options) => {
 
 ipcMain.handle('git:isRepository', async () => {
   return await checkGitRepositoryUseCase.execute();
+});
+
+// IPC Handlers for GitHub
+ipcMain.handle('github:saveToken', async (_event, token) => {
+  return await saveGitHubTokenUseCase.execute(token);
+});
+
+ipcMain.handle('github:getUser', async () => {
+  return await getGitHubUserUseCase.execute();
+});
+
+ipcMain.handle('github:clearToken', async () => {
+  return await clearGitHubTokenUseCase.execute();
+});
+
+ipcMain.handle('github:listRepos', async () => {
+  return await listGitHubReposUseCase.execute();
+});
+
+ipcMain.handle('github:createPR', async (_event, options) => {
+  return await createPullRequestUseCase.execute(options);
+});
+
+ipcMain.handle('github:getMarketplaceGists', async () => {
+  return await getMarketplaceGistsUseCase.execute();
+});
+
+ipcMain.handle('github:getGist', async (_event, id) => {
+  return await getGistUseCase.execute(id);
+});
+
+ipcMain.handle('github:publishGist', async (_event, description, files) => {
+  return await publishGistUseCase.execute(description, files);
+});
+
+ipcMain.handle('github:pushFiles', async (_event, owner, repo, baseBranch, newBranch, files, commitMessage) => {
+  await githubService.pushFilesToBranch(owner, repo, baseBranch, newBranch, files, commitMessage);
+});
+
+// ── Multi-provider IPC handlers ────────────────────────────────────────────
+ipcMain.handle('gitProvider:getConnectedAccounts', async () => {
+  return getConnectedAccountsUseCase.execute();
+});
+ipcMain.handle('gitProvider:getSettings', async () => {
+  return getProviderSettingsUseCase.execute();
+});
+ipcMain.handle('gitProvider:setClientId', async (_event, type, clientId) => {
+  return setProviderClientIdUseCase.execute(type, clientId);
+});
+ipcMain.handle('gitProvider:startDeviceFlow', async (_event, type) => {
+  return startDeviceFlowUseCase.execute(type);
+});
+ipcMain.handle('gitProvider:completeDeviceFlow', async (_event, type, init) => {
+  return completeDeviceFlowUseCase.execute(type, init);
+});
+ipcMain.handle('gitProvider:connectAppPassword', async (_event, type, token, extra) => {
+  return connectWithAppPasswordUseCase.execute(type, token, extra);
+});
+ipcMain.handle('gitProvider:disconnect', async (_event, type) => {
+  return disconnectProviderUseCase.execute(type);
+});
+ipcMain.handle('gitProvider:listRepos', async (_event, type) => {
+  return listReposUseCase.execute(type);
+});
+ipcMain.handle('gitProvider:pushFiles', async (_event, type, owner, repo, baseBranch, newBranch, files, message) => {
+  return pushFilesUseCase.execute(type, owner, repo, baseBranch, newBranch, files, message);
+});
+ipcMain.handle('gitProvider:createPR', async (_event, type, options) => {
+  return createPRUseCase.execute(type, options);
+});
+ipcMain.handle('gitProvider:listMarketplaceSnippets', async (_event, type) => {
+  return listMarketplaceSnippetsUseCase.execute(type);
+});
+ipcMain.handle('gitProvider:getSnippet', async (_event, type, id) => {
+  return getSnippetUseCase.execute(type, id);
+});
+ipcMain.handle('gitProvider:publishSnippet', async (_event, type, description, files, isPublic) => {
+  return publishSnippetUseCase.execute(type, description, files, isPublic);
+});
+
+// IPC Handlers for Workspace Deploy
+ipcMain.handle('workspace:deployAgent', async (_event, agent, platform, projectPath) => {
+  const content = await exportAgentToMdUseCase.execute(agent, platform);
+  const relPath = (PLATFORM_OUTPUT_PATHS[platform as Platform] || '.github/copilot-instructions.md')
+    .replace('{name}', (agent.metadata?.name || 'agent').replace(/\s+/g, '-').toLowerCase());
+  const destPath = path.join(projectPath, relPath);
+  await fs.mkdir(path.dirname(destPath), { recursive: true });
+  await fs.writeFile(destPath, content, 'utf-8');
+  return destPath;
+});
+
+ipcMain.handle('workspace:deploySkill', async (_event, skill, platform, projectPath) => {
+  const content = await exportSkillToMdUseCase.execute(skill, platform);
+  const name = (skill.metadata?.name || 'skill').replace(/\s+/g, '-').toLowerCase();
+  // Skills always go into a skills/ subdirectory relative to the agent instructions path
+  const platformBase: Record<string, string> = {
+    'github-copilot': `.github/instructions/${name}.instructions.md`,
+    claude: `claude/skills/${name}.md`,
+    cursor: `.cursor/rules/${name}.mdc`,
+    antigravity: `antigravity.skills.json`,
+    opencode: `.opencode/skills/${name}.md`,
+  };
+  const relPath = platformBase[platform as string] || `.github/instructions/${name}.instructions.md`;
+  const destPath = path.join(projectPath, relPath);
+  await fs.mkdir(path.dirname(destPath), { recursive: true });
+  await fs.writeFile(destPath, content, 'utf-8');
+  return destPath;
 });

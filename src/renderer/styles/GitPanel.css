@@ -2,7 +2,8 @@
   padding: 1.5rem;
   background: var(--vscode-editor-background);
   color: var(--vscode-foreground);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 

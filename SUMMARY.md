@@ -36,7 +36,25 @@
 - ✅ Real-time file change detection
 - ✅ File watching with Chokidar
 
-### 5. Pattern Analysis
+### 5. Workspace Setup *(replaces Pattern Analysis)*
+- ✅ Repository language/framework/pattern detection
+- ✅ Multi-platform config generation (GitHub Copilot, Claude, Cursor, Antigravity, OpenCode)
+- ✅ One-click deploy to any project directory via `workspace:deployAgent` / `workspace:deploySkill`
+- ✅ Generate and download `copilot-instructions.md`
+
+### 6. GitHub Integration
+- ✅ PAT-based authentication stored in system keyring
+- ✅ Connected user shown in Sidebar footer (avatar, login, disconnect)
+- ✅ Pull Request creation from Agent Editor and Skill Wizard
+- ✅ Files pushed to GitHub via Git Trees API (no local git required)
+- ✅ Repo listing, PR creation, Gist CRUD
+
+### 7. Discover / Gist Marketplace
+- ✅ Browse public Gists tagged `[agent-orchestrator]`
+- ✅ Preview gist content in modal; import as agent with one click
+- ✅ Publish any agent or skill as a public Gist
+
+### 5 (original). Pattern Analysis
 - ✅ Agent configuration analysis
 - ✅ Codebase pattern input support
 - ✅ Generate `copilot-instructions.md`
@@ -248,5 +266,5 @@ MIT License - See LICENSE file for details
 ---
 
 **Status**: ✅ Production Ready  
-**Version**: 1.0.0  
-**Last Updated**: 2024-02-17
+**Version**: 1.1.0  
+**Last Updated**: 2026-02-17

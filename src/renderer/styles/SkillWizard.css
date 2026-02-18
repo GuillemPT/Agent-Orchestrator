@@ -1,7 +1,9 @@
 .skill-wizard {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .wizard-header {
@@ -180,4 +182,26 @@
   margin-top: 0.5rem;
   font-style: italic;
   color: var(--text-secondary);
+}
+
+/* Platform export group */
+.export-group {
+  display: flex;
+  gap: 0;
+}
+
+.export-group .platform-select {
+  height: 32px;
+  padding: 0 8px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.export-group .btn {
+  border-radius: 0 4px 4px 0;
 }

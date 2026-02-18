@@ -1,5 +1,5 @@
-import { Agent } from '@domain/entities/Agent';
-import { RepositoryAnalyzerService, RepositoryAnalysis } from '@infrastructure/services/RepositoryAnalyzerService';
+import { Agent } from '../../domain/entities/Agent';
+import { RepositoryAnalyzerService, RepositoryAnalysis } from '../../infrastructure/services/RepositoryAnalyzerService';
 
 export interface PatternAnalysisResult {
   patterns: string[];

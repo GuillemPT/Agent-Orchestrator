@@ -2,6 +2,24 @@ import { useState, useEffect } from 'react';
 import ToolSelector from './ToolSelector';
 import '../styles/AgentEditor.css';
 
+type Platform = 'github-copilot' | 'claude' | 'cursor' | 'antigravity' | 'opencode';
+
+const PLATFORM_LABELS: Record<Platform, string> = {
+  'github-copilot': 'GitHub Copilot',
+  claude: 'Claude',
+  cursor: 'Cursor',
+  antigravity: 'Antigravity',
+  opencode: 'OpenCode',
+};
+
+const PLATFORM_FILENAMES: Record<Platform, string> = {
+  'github-copilot': 'copilot-instructions.md',
+  claude: 'CLAUDE.md',
+  cursor: '{name}.mdc',
+  antigravity: 'antigravity.config.json',
+  opencode: 'instructions.md',
+};
+
 interface Agent {
   id: string;
   metadata: {
@@ -30,6 +48,18 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
   const [currentAgent, setCurrentAgent] = useState<Agent | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showToolSelector, setShowToolSelector] = useState(false);
+  const [exportPlatform, setExportPlatform] = useState<Platform>('github-copilot');
+
+  // PR modal state
+  const [showPRModal, setShowPRModal] = useState(false);
+  const [prOwnerRepo, setPrOwnerRepo] = useState('');
+  const [prHead, setPrHead] = useState('');
+  const [prBase, setPrBase] = useState('main');
+  const [prTitle, setPrTitle] = useState('');
+  const [prBody, setPrBody] = useState('');
+  const [prCreating, setPrCreating] = useState(false);
+  const [prResult, setPrResult] = useState<{ url: string; number: number } | null>(null);
+  const [prError, setPrError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAgents();
@@ -37,13 +67,19 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
   useEffect(() => {
     if (agentId) {
+      // Reset edit state when switching to a different agent
+      setIsEditing(false);
+      setShowToolSelector(false);
       loadAgent(agentId);
+    } else {
+      setIsEditing(false);
+      setCurrentAgent(null);
     }
   }, [agentId]);
 
   const loadAgents = async () => {
     try {
-      const loadedAgents = await (window as any).api.agent.getAll();
+      const loadedAgents = await window.api.agent.getAll();
       setAgents(loadedAgents);
     } catch (error) {
       console.error('Failed to load agents:', error);
@@ -52,7 +88,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
   const loadAgent = async (id: string) => {
     try {
-      const agent = await (window as any).api.agent.getById(id);
+      const agent = await window.api.agent.getById(id);
       setCurrentAgent(agent);
     } catch (error) {
       console.error('Failed to load agent:', error);
@@ -61,7 +97,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
   const createNewAgent = async () => {
     try {
-      const newAgent = await (window as any).api.agent.create({
+      const newAgent = await window.api.agent.create({
         metadata: {
           name: 'New Agent',
           version: '1.0.0',
@@ -83,7 +119,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
     if (!currentAgent) return;
 
     try {
-      await (window as any).api.agent.update(currentAgent.id, currentAgent);
+      await window.api.agent.update(currentAgent.id, currentAgent);
       setIsEditing(false);
       loadAgents();
     } catch (error) {
@@ -96,7 +132,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
     if (confirm(`Are you sure you want to delete "${currentAgent.metadata.name}"?`)) {
       try {
-        await (window as any).api.agent.delete(currentAgent.id);
+        await window.api.agent.delete(currentAgent.id);
         setCurrentAgent(null);
         onAgentChange(null);
         loadAgents();
@@ -110,12 +146,15 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
     if (!currentAgent) return;
 
     try {
-      const markdown = await (window as any).api.agent.exportToMd(currentAgent);
-      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const content = await window.api.agent.exportToMd(currentAgent, exportPlatform);
+      const isJson = exportPlatform === 'antigravity';
+      const mimeType = isJson ? 'application/json' : 'text/markdown';
+      const filename = PLATFORM_FILENAMES[exportPlatform].replace('{name}', currentAgent.metadata.name);
+      const blob = new Blob([content], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${currentAgent.metadata.name}.agent.md`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -123,10 +162,47 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
     }
   };
 
+  const openPRModal = () => {
+    if (!currentAgent) return;
+    setPrTitle(`Add agent: ${currentAgent.metadata.name}`);
+    setPrBody(`Adds the **${currentAgent.metadata.name}** agent configuration generated by Agent Orchestrator.\n\n${currentAgent.metadata.description || ''}`);
+    setPrHead(`feat/add-agent-${currentAgent.metadata.name.replace(/\s+/g, '-').toLowerCase()}`);
+    setPrResult(null);
+    setPrError(null);
+    setShowPRModal(true);
+  };
+
+  const handleCreatePR = async () => {
+    if (!currentAgent) return;
+    const [owner, repo] = prOwnerRepo.split('/');
+    if (!owner || !repo || !prHead || !prTitle) {
+      setPrError('Please fill in all required fields (owner/repo, head branch, title).');
+      return;
+    }
+    setPrCreating(true);
+    setPrError(null);
+    try {
+      // Export agent markdown and push to branch via GitHub API
+      const content = await window.api.agent.exportToMd(currentAgent, 'github-copilot');
+      await window.api.github.pushFiles(
+        owner, repo, prBase, prHead,
+        [{ path: '.github/copilot-instructions.md', content }],
+        `chore: add ${currentAgent.metadata.name} agent config`,
+      );
+      const result = await window.api.github.createPR({ owner, repo, head: prHead, base: prBase, title: prTitle, body: prBody });
+      setPrResult(result);
+    } catch (e: any) {
+      setPrError(e?.message || String(e));
+    } finally {
+      setPrCreating(false);
+    }
+  };
+
   const updateField = (path: string[], value: any) => {
     if (!currentAgent) return;
 
-    const updated = { ...currentAgent };
+    // Deep clone to avoid mutating nested shared state
+    const updated = structuredClone(currentAgent);
     let obj: any = updated;
     for (let i = 0; i < path.length - 1; i++) {
       obj = obj[path[i]];
@@ -156,7 +232,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
   return (
     <div className="agent-editor">
-      <div className="editor-header">
+      <div className="agent-header">
         <h2>Agent Editor</h2>
         <div className="header-actions">
           <button className="btn btn-primary" onClick={createNewAgent}>
@@ -191,11 +267,25 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
                       <button className="btn" onClick={() => setIsEditing(true)}>
                         Edit
                       </button>
-                      <button className="btn" onClick={exportToMd}>
-                        Export .md
-                      </button>
+                      <div className="export-group">
+                        <select
+                          className="platform-select"
+                          value={exportPlatform}
+                          onChange={(e) => setExportPlatform(e.target.value as Platform)}
+                        >
+                          {(Object.keys(PLATFORM_LABELS) as Platform[]).map(p => (
+                            <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>
+                          ))}
+                        </select>
+                        <button className="btn" onClick={exportToMd}>
+                          Export
+                        </button>
+                      </div>
                       <button className="btn btn-danger" onClick={deleteAgent}>
                         Delete
+                      </button>
+                      <button className="btn btn-github" onClick={openPRModal} title="Create GitHub Pull Request">
+                        Create PR
                       </button>
                     </>
                   ) : (
@@ -334,6 +424,87 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
           )}
         </div>
       </div>
+      {/* PR Modal */}
+      {showPRModal && (
+        <div className="modal-overlay" onClick={() => !prCreating && setShowPRModal(false)}>
+          <div className="modal-content pr-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Create GitHub Pull Request</h3>
+              <button className="modal-close" onClick={() => setShowPRModal(false)} disabled={prCreating}>✕</button>
+            </div>
+
+            {prResult ? (
+              <div className="pr-success">
+                <p>✅ Pull Request <strong>#{prResult.number}</strong> created successfully!</p>
+                <a href={prResult.url} target="_blank" rel="noreferrer" className="btn btn-primary">
+                  View PR on GitHub
+                </a>
+                <button className="btn" onClick={() => setShowPRModal(false)} style={{ marginLeft: '8px' }}>Close</button>
+              </div>
+            ) : (
+              <div className="pr-form">
+                <div className="form-group">
+                  <label>Repository <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    placeholder="owner/repo"
+                    value={prOwnerRepo}
+                    onChange={e => setPrOwnerRepo(e.target.value)}
+                    disabled={prCreating}
+                  />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Base branch <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      value={prBase}
+                      onChange={e => setPrBase(e.target.value)}
+                      disabled={prCreating}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Head branch <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      value={prHead}
+                      onChange={e => setPrHead(e.target.value)}
+                      disabled={prCreating}
+                    />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Title <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    value={prTitle}
+                    onChange={e => setPrTitle(e.target.value)}
+                    disabled={prCreating}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea
+                    value={prBody}
+                    onChange={e => setPrBody(e.target.value)}
+                    rows={4}
+                    disabled={prCreating}
+                  />
+                </div>
+                {prError && <p className="pr-error">{prError}</p>}
+                <div className="modal-actions">
+                  <button className="btn btn-primary" onClick={handleCreatePR} disabled={prCreating}>
+                    {prCreating ? 'Creating…' : 'Create Pull Request'}
+                  </button>
+                  <button className="btn" onClick={() => setShowPRModal(false)} disabled={prCreating}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

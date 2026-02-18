@@ -19,7 +19,7 @@ function SyncPanel() {
 
   const detectChanges = async () => {
     try {
-      const detected = await (window as any).api.sync.detectChanges();
+      const detected = await window.api.sync.detectChanges();
       setChanges(detected);
     } catch (error) {
       console.error('Failed to detect changes:', error);
@@ -29,7 +29,7 @@ function SyncPanel() {
   const performSync = async () => {
     setSyncing(true);
     try {
-      await (window as any).api.sync.syncDirectories({
+      await window.api.sync.syncDirectories({
         direction,
         conflictResolution,
       });
@@ -50,7 +50,7 @@ function SyncPanel() {
 
     setCopyingSkills(true);
     try {
-      await (window as any).api.sync.syncDirectories({
+      await window.api.sync.syncDirectories({
         direction: 'toGithub',
         conflictResolution: 'home',
         specificPath: 'skills',

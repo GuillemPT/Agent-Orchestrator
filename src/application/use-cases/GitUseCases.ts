@@ -1,4 +1,4 @@
-import { GitService, GitCommitOptions, GitStatus } from '@infrastructure/services/GitService';
+import { GitService, GitCommitOptions, GitStatus } from '../../infrastructure/services/GitService';
 
 export class GetGitStatusUseCase {
   constructor(private gitService: GitService) {}

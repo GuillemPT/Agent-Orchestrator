@@ -15,7 +15,7 @@ function GitPanel() {
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [isRepository, setIsRepository] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
-  const [isCommitting, setIsCommitting] = useState(false);
+  const [commitAction, setCommitAction] = useState<'idle' | 'commit' | 'push'>('idle');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ function GitPanel() {
 
   const checkRepository = async () => {
     try {
-      const isRepo = await (window as any).api.git.isRepository();
+      const isRepo = await window.api.git.isRepository();
       setIsRepository(isRepo);
       if (isRepo) {
         refreshStatus();
@@ -36,7 +36,7 @@ function GitPanel() {
 
   const refreshStatus = async () => {
     try {
-      const status = await (window as any).api.git.getStatus();
+      const status = await window.api.git.getStatus();
       setGitStatus(status);
     } catch (error) {
       console.error('Failed to get Git status:', error);
@@ -48,10 +48,12 @@ function GitPanel() {
       alert('Please enter a commit message');
       return;
     }
+    const isCommitting = commitAction !== 'idle';
+    if (isCommitting) return;
 
     try {
-      setIsCommitting(true);
-      await (window as any).api.git.atomicCommit({
+      setCommitAction(push ? 'push' : 'commit');
+      await window.api.git.atomicCommit({
         message: commitMessage,
         files: selectedFiles.length > 0 ? selectedFiles : undefined,
         push: push,
@@ -65,7 +67,7 @@ function GitPanel() {
       console.error('Failed to commit:', error);
       alert(`Failed to commit: ${error.message}`);
     } finally {
-      setIsCommitting(false);
+      setCommitAction('idle');
     }
   };
 
@@ -230,16 +232,16 @@ function GitPanel() {
               <button
                 className="btn btn-primary"
                 onClick={() => handleCommit(false)}
-                disabled={isCommitting || !commitMessage.trim()}
+                disabled={commitAction !== 'idle' || !commitMessage.trim()}
               >
-                {isCommitting ? 'Committing...' : '💾 Commit'}
+                {commitAction === 'commit' ? 'Committing...' : '💾 Commit'}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={() => handleCommit(true)}
-                disabled={isCommitting || !commitMessage.trim()}
+                disabled={commitAction !== 'idle' || !commitMessage.trim()}
               >
-                {isCommitting ? 'Committing...' : '🚀 Commit & Push'}
+                {commitAction === 'push' ? 'Pushing...' : '🚀 Commit & Push'}
               </button>
             </div>
 

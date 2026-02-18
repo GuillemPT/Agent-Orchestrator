@@ -1,5 +1,6 @@
-import { Agent, AgentEntity } from '@domain/entities/Agent';
-import { IAgentRepository } from '@domain/interfaces/IAgentRepository';
+import { Agent, AgentEntity } from '../../domain/entities/Agent';
+import { Platform } from '../../domain/entities/Platform';
+import { IAgentRepository } from '../../domain/interfaces/IAgentRepository';
 
 export class CreateAgentUseCase {
   constructor(private agentRepository: IAgentRepository) {}
@@ -53,7 +54,7 @@ export class GetAgentByIdUseCase {
 export class ExportAgentToMdUseCase {
   constructor(private agentRepository: IAgentRepository) {}
 
-  async execute(agent: Agent): Promise<string> {
-    return await this.agentRepository.exportToAgentMd(agent);
+  async execute(agent: Agent, platform?: Platform): Promise<string> {
+    return await this.agentRepository.exportToAgentMd(agent, platform);
   }
 }

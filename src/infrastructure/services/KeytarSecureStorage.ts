@@ -1,4 +1,4 @@
-import { ISecureStorage } from '@domain/interfaces/ISecureStorage';
+import { ISecureStorage } from '../../domain/interfaces/ISecureStorage';
 
 export class KeytarSecureStorage implements ISecureStorage {
   private keytar: any;

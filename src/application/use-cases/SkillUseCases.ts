@@ -1,5 +1,6 @@
-import { Skill, SkillEntity } from '@domain/entities/Skill';
-import { ISkillRepository } from '@domain/interfaces/ISkillRepository';
+import { Skill, SkillEntity } from '../../domain/entities/Skill';
+import { Platform } from '../../domain/entities/Platform';
+import { ISkillRepository } from '../../domain/interfaces/ISkillRepository';
 
 export class CreateSkillUseCase {
   constructor(private skillRepository: ISkillRepository) {}
@@ -45,8 +46,8 @@ export class GetAllSkillsUseCase {
 export class ExportSkillToMdUseCase {
   constructor(private skillRepository: ISkillRepository) {}
 
-  async execute(skill: Skill): Promise<string> {
-    return await this.skillRepository.exportToSkillMd(skill);
+  async execute(skill: Skill, platform?: Platform): Promise<string> {
+    return await this.skillRepository.exportToSkillMd(skill, platform);
   }
 }
 

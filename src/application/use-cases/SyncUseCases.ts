@@ -1,4 +1,4 @@
-import { ISyncService, SyncOptions } from '@domain/interfaces/ISyncService';
+import { ISyncService, SyncOptions } from '../../domain/interfaces/ISyncService';
 
 export class SyncCopilotDirectoriesUseCase {
   constructor(private syncService: ISyncService) {}

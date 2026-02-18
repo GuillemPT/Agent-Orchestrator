@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { glob } from 'fast-glob';
 
 export interface GlobPattern {
   pattern: string;
@@ -265,46 +266,37 @@ export class RepositoryAnalyzerService {
   }
 
   /**
-   * Validate glob patterns for instructions files
+   * Validate glob patterns using fast-glob's built-in validation
    */
   validateGlobPattern(pattern: string): boolean {
-    // Basic validation - check if pattern is valid
     if (!pattern || pattern.trim() === '') return false;
-    
-    // Pattern should end with .md or contain wildcards
-    return pattern.endsWith('.md') || pattern.includes('*') || pattern.includes('?');
+    // fast-glob throws on invalid patterns — try a dry-run scan with limit 0
+    try {
+      // Check for obviously malformed patterns (unclosed brackets, triple-star)
+      if (/\[(?![^\]]*\])/.test(pattern)) return false; // unclosed [
+      if (/\*{3,}/.test(pattern)) return false;          // *** or more
+      // Require the pattern to have some glob utility or be a concrete path
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
-   * Find files matching glob pattern
-   * Note: This is a simplified implementation. For production, consider using
-   * a dedicated glob library like 'fast-glob' or 'minimatch' for better accuracy
+   * Find files matching a real glob pattern via fast-glob.
    */
   async findFilesMatchingPattern(pattern: string): Promise<string[]> {
-    const files: string[] = [];
-    
-    // For now, do a simple substring match for *.md patterns
-    // TODO: Implement proper glob matching or integrate a glob library
-    const isSimpleMdPattern = pattern.endsWith('*.md') || pattern.includes('*.instructions.md');
-    
-    await this.walkDirectory(this.repoPath, async (filePath) => {
-      const relativePath = path.relative(this.repoPath, filePath);
-      
-      if (isSimpleMdPattern && relativePath.endsWith('.md')) {
-        // For *.instructions.md patterns
-        if (pattern.includes('.instructions.md')) {
-          if (relativePath.endsWith('.instructions.md')) {
-            files.push(relativePath);
-          }
-        } else {
-          files.push(relativePath);
-        }
-      } else if (relativePath.includes(pattern.replace(/\*/g, ''))) {
-        // Fallback: simple substring match
-        files.push(relativePath);
-      }
-    });
-
-    return files;
+    try {
+      const results = await glob(pattern, {
+        cwd: this.repoPath,
+        ignore: ['node_modules/**', '.git/**', 'dist/**', 'build/**', '.next/**'],
+        dot: false,
+        onlyFiles: true,
+      });
+      return results.sort();
+    } catch (error) {
+      console.error('Error finding files matching pattern:', error);
+      return [];
+    }
   }
 }

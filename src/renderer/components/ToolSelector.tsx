@@ -26,7 +26,7 @@ function ToolSelector({ selectedTools, onToolsChange }: ToolSelectorProps) {
   const loadAvailableTools = async () => {
     try {
       setIsLoading(true);
-      const tools = await (window as any).api.mcp.getAvailableTools();
+      const tools = await window.api.mcp.getAvailableTools();
       
       // Mark tools as enabled based on selectedTools
       const toolsWithState = tools.map((tool: MCPTool) => ({
@@ -50,7 +50,7 @@ function ToolSelector({ selectedTools, onToolsChange }: ToolSelectorProps) {
 
     try {
       setIsLoading(true);
-      const tools = await (window as any).api.mcp.searchTools(searchQuery);
+      const tools = await window.api.mcp.searchTools(searchQuery);
       
       const toolsWithState = tools.map((tool: MCPTool) => ({
         ...tool,
