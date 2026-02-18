@@ -1,5 +1,6 @@
-import { Skill, SkillEntity } from '@domain/entities/Skill';
-import { ISkillRepository } from '@domain/interfaces/ISkillRepository';
+import { Skill, SkillEntity } from '../../domain/entities/Skill';
+import { Platform } from '../../domain/entities/Platform';
+import { ISkillRepository } from '../../domain/interfaces/ISkillRepository';
 
 export class CreateSkillUseCase {
   constructor(private skillRepository: ISkillRepository) {}
@@ -45,8 +46,8 @@ export class GetAllSkillsUseCase {
 export class ExportSkillToMdUseCase {
   constructor(private skillRepository: ISkillRepository) {}
 
-  async execute(skill: Skill): Promise<string> {
-    return await this.skillRepository.exportToSkillMd(skill);
+  async execute(skill: Skill, platform?: Platform): Promise<string> {
+    return await this.skillRepository.exportToSkillMd(skill, platform);
   }
 }
 
@@ -55,5 +56,21 @@ export class ExportSkillToYamlUseCase {
 
   async execute(skill: Skill): Promise<string> {
     return await this.skillRepository.exportToYaml(skill);
+  }
+}
+
+export class CreateSkillDirectoryUseCase {
+  constructor(private skillRepository: ISkillRepository) {}
+
+  async execute(skill: Skill, basePath: string): Promise<void> {
+    return await this.skillRepository.createSkillDirectory(skill, basePath);
+  }
+}
+
+export class ValidateSkillDescriptionUseCase {
+  constructor(private skillRepository: ISkillRepository) {}
+
+  async execute(description: string): Promise<{ score: number; suggestions: string[] }> {
+    return await this.skillRepository.validateDescription(description);
   }
 }

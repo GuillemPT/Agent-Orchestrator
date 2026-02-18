@@ -13,7 +13,8 @@ Agent Orchestrator is a desktop application built with Electron and React that h
 │  │              React Components (UI)                   │   │
 │  │  - AgentEditor    - SkillWizard                     │   │
 │  │  - MCPConfig      - SyncPanel                       │   │
-│  │  - PatternAnalysis                                   │   │
+│  │  - WorkspaceSetup - Discover                        │   │
+│  │  - GitPanel                                         │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                              ↓ ↑
@@ -25,6 +26,8 @@ Agent Orchestrator is a desktop application built with Electron and React that h
 │  │  - CreateSkill    - ExportSkill                     │   │
 │  │  - LoadMCPConfig  - SyncDirectories                 │   │
 │  │  - GenerateInstructions                             │   │
+│  │  - SaveGitHubToken - CreatePullRequest              │   │
+│  │  - GetMarketplaceGists - PublishGist                │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                              ↓ ↑
@@ -47,7 +50,8 @@ Agent Orchestrator is a desktop application built with Electron and React that h
 │  │     Repositories              Services              │   │
 │  │  - FileSystemAgent      - KeytarSecureStorage      │   │
 │  │  - FileSystemSkill      - CopilotSyncService       │   │
-│  │  - FileSystemMCP                                    │   │
+│  │  - FileSystemMCP        - GitHubService            │   │
+│  │                         - GitService               │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                              ↓ ↑

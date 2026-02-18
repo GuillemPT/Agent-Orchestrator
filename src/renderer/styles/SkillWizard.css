@@ -1,7 +1,9 @@
 .skill-wizard {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .wizard-header {
@@ -142,4 +144,64 @@
 .script-header h5 {
   font-size: 14px;
   font-weight: 600;
+}
+
+.validation-result {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.validation-result.good {
+  background-color: rgba(0, 128, 0, 0.1);
+  border: 1px solid rgba(0, 128, 0, 0.3);
+}
+
+.validation-result.needs-improvement {
+  background-color: rgba(255, 165, 0, 0.1);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+}
+
+.validation-score {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.validation-suggestions {
+  margin: 0.5rem 0 0 1.5rem;
+  list-style-type: disc;
+}
+
+.validation-suggestions li {
+  margin-bottom: 0.25rem;
+  color: var(--text-secondary);
+}
+
+.validating {
+  margin-top: 0.5rem;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* Platform export group */
+.export-group {
+  display: flex;
+  gap: 0;
+}
+
+.export-group .platform-select {
+  height: 32px;
+  padding: 0 8px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.export-group .btn {
+  border-radius: 0 4px 4px 0;
 }

@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-17
+
+### Added
+
+#### GitHub Integration (Phase 5)
+- **GitHub Authentication** — PAT-based login stored securely in system keyring via Keytar; connected user shown in Sidebar footer with avatar + disconnect button
+- **Pull Request Creation** — "Create PR" button in Agent Editor and Skill Wizard; exports the config to a new branch via GitHub Git Trees API and opens a PR — no local git checkout required
+- **GitHub Git Trees API support** — `pushFilesToBranch` pushes files directly to any branch with automatic blob/tree/commit creation
+- **`GitHubService`** — new infrastructure service wrapping GitHub REST API (user, repos, PRs, Gists, Git Trees)
+- **`GitHubUseCases`** — eight use cases: SaveToken, GetUser, ClearToken, ListRepos, CreatePR, GetMarketplaceGists, GetGist, PublishGist
+- **IPC handlers & typed API** — `window.api.github.*` and `window.api.workspace.*` namespaces fully typed in `electron.d.ts`
+
+#### Discover / Gist Marketplace (Phase 6)
+- **Browse Marketplace tab** — lists public GitHub Gists tagged `[agent-orchestrator]`, with per-gist preview modal and one-click "Import as Agent"
+- **Publish tab** — export any agent or skill as a public Gist direct from the UI
+- **`Discover` component** — new view accessible from the Sidebar; shows warning banner when GitHub is not connected
+
+#### Workspace Setup (Phase 7 — replaces Pattern Analysis)
+- **Analyze tab** — repository language/framework/pattern detection and Copilot instruction generation
+- **Generate All Platforms tab** — select an agent + target project path, choose platforms (GitHub Copilot, Claude, Cursor, Antigravity, OpenCode), generate and deploy all configs in one click via `workspace:deployAgent` IPC
+- `workspace:deploySkill` IPC handler for deploying skill configs to platform-specific paths
+
+#### Testing
+- **`GitHubUseCases.test.ts`** — 16 new unit tests covering all eight GitHub use cases with mock service (happy path + failure scenarios)
+- Test suite now at **66 tests** across 5 test files
+
+### Changed
+- **Sidebar** navigation updated: *Pattern Analysis* replaced by *Workspace Setup* (🗂️) and *Discover* (🛒)
+- **AgentEditor** action toolbar expanded with *Create PR* (dark GitHub button)
+- **SkillWizard** action toolbar expanded with *Create PR* (same modal pattern as AgentEditor)
+- `PatternAnalysis.tsx` and `PatternAnalysis.css` removed
+
+---
+
 ## [1.0.0] - 2024-02-17
 
 ### Added

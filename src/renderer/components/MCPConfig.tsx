@@ -1,344 +1,330 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import '../styles/MCPConfig.css';
+import type { MCPProjectConfig, MCPServerConfig } from '../types/electron';
 
-interface MCPConfig {
-  mcpServers: Record<
-    string,
-    {
-      command: string;
-      args?: string[];
-      env?: Record<string, string>;
-    }
-  >;
-  tools?: Array<{
-    name: string;
-    enabled: boolean;
-    servers?: string[];
-  }>;
-  credentials?: Record<string, string>;
+type Platform = 'github-copilot' | 'claude' | 'cursor' | 'antigravity' | 'opencode';
+
+const PLATFORM_LABELS: Record<Platform, string> = {
+  'github-copilot': 'GitHub Copilot',
+  claude: 'Claude',
+  cursor: 'Cursor',
+  antigravity: 'Antigravity',
+  opencode: 'OpenCode',
+};
+
+const CONFIG_FILE_PATHS: Record<Platform, string> = {
+  'github-copilot': '.vscode/mcp.json',
+  claude: '.claude/settings.json',
+  cursor: '.cursor/mcp.json',
+  antigravity: 'antigravity.config.json',
+  opencode: '.opencode/mcp.json',
+};
+
+function emptyServer(): MCPServerConfig {
+  return { command: '', args: [], env: {} };
 }
 
 function MCPConfig() {
-  const [config, setConfig] = useState<MCPConfig | null>(null);
+  const [projects, setProjects] = useState<MCPProjectConfig[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<MCPProjectConfig | null>(null);
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
-  const [showCredentialDialog, setShowCredentialDialog] = useState(false);
-  const [credentialKey, setCredentialKey] = useState('');
-  const [credentialValue, setCredentialValue] = useState('');
+  const [newServerName, setNewServerName] = useState('');
+  const [status, setStatus] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
 
-  useEffect(() => {
-    loadConfig();
+  const loadProjects = useCallback(async () => {
+    try {
+      const list = await window.api.mcp.getAllProjects();
+      setProjects(list);
+    } catch (err) {
+      console.error('Failed to load MCP projects', err);
+    }
   }, []);
 
-  const loadConfig = async () => {
+  useEffect(() => { loadProjects(); }, [loadProjects]);
+
+  useEffect(() => {
+    if (!selectedId) { setEditing(null); setSelectedServer(null); return; }
+    const p = projects.find(p => p.id === selectedId);
+    setEditing(p ? structuredClone(p) : null);
+    setSelectedServer(null);
+  }, [selectedId, projects]);
+
+  const showStatus = (msg: string, kind: 'ok' | 'err' = 'ok') => {
+    setStatus({ msg, kind });
+    setTimeout(() => setStatus(null), 3000);
+  };
+
+  // ── Project CRUD ─────────────────────────────────────────────────────────
+
+  const newProject = async () => {
     try {
-      const loadedConfig = await (window as any).api.mcp.load();
-      setConfig(loadedConfig);
-    } catch (error) {
-      console.error('Failed to load MCP config:', error);
+      const created = await window.api.mcp.createProject({
+        label: 'New Project',
+        projectPath: '',
+        platform: 'github-copilot',
+        mcpServers: {},
+      });
+      await loadProjects();
+      setSelectedId(created.id);
+    } catch {
+      showStatus('Failed to create project', 'err');
     }
   };
 
-  const saveConfig = async () => {
-    if (!config) return;
-
+  const saveProject = async () => {
+    if (!editing) return;
     try {
-      await (window as any).api.mcp.save(config);
-      alert('Configuration saved successfully!');
-    } catch (error) {
-      console.error('Failed to save config:', error);
-      alert('Failed to save configuration');
+      await window.api.mcp.updateProject(editing.id, editing);
+      await loadProjects();
+      showStatus('Saved');
+    } catch {
+      showStatus('Save failed', 'err');
     }
   };
 
-  const exportConfig = async () => {
+  const deleteProject = async () => {
+    if (!editing) return;
+    if (!confirm(`Delete project "${editing.label}"?`)) return;
     try {
-      const json = await (window as any).api.mcp.export();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'mcp.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to export config:', error);
+      await window.api.mcp.deleteProject(editing.id);
+      setSelectedId(null);
+      await loadProjects();
+      showStatus('Deleted');
+    } catch {
+      showStatus('Delete failed', 'err');
     }
   };
+
+  const deployProject = async () => {
+    if (!editing) return;
+    if (!editing.projectPath.trim()) {
+      showStatus('Set a project path before deploying', 'err');
+      return;
+    }
+    try {
+      const dest = await window.api.mcp.deployProject(editing);
+      showStatus(`Deployed → ${dest}`);
+    } catch {
+      showStatus('Deploy failed', 'err');
+    }
+  };
+
+  // ── Server CRUD ───────────────────────────────────────────────────────────
 
   const addServer = () => {
-    if (!config) return;
-
-    const serverName = prompt('Enter server name:');
-    if (!serverName) return;
-
-    setConfig({
-      ...config,
-      mcpServers: {
-        ...config.mcpServers,
-        [serverName]: {
-          command: '',
-          args: [],
-          env: {},
-        },
-      },
-    });
-    setSelectedServer(serverName);
+    if (!editing || !newServerName.trim()) return;
+    const name = newServerName.trim();
+    if (editing.mcpServers[name]) {
+      showStatus('A server with that name already exists', 'err');
+      return;
+    }
+    setEditing({ ...editing, mcpServers: { ...editing.mcpServers, [name]: emptyServer() } });
+    setSelectedServer(name);
+    setNewServerName('');
   };
 
   const removeServer = (name: string) => {
-    if (!config) return;
-
-    if (confirm(`Are you sure you want to remove server "${name}"?`)) {
-      const { [name]: _, ...rest } = config.mcpServers;
-      setConfig({
-        ...config,
-        mcpServers: rest,
-      });
-      if (selectedServer === name) {
-        setSelectedServer(null);
-      }
-    }
+    if (!editing) return;
+    const { [name]: _, ...rest } = editing.mcpServers;
+    setEditing({ ...editing, mcpServers: rest });
+    if (selectedServer === name) setSelectedServer(null);
   };
 
-  const updateServer = (name: string, field: string, value: any) => {
-    if (!config) return;
-
-    setConfig({
-      ...config,
+  const updateServerField = (key: keyof MCPServerConfig, value: unknown) => {
+    if (!editing || !selectedServer) return;
+    setEditing({
+      ...editing,
       mcpServers: {
-        ...config.mcpServers,
-        [name]: {
-          ...config.mcpServers[name],
-          [field]: value,
-        },
+        ...editing.mcpServers,
+        [selectedServer]: { ...editing.mcpServers[selectedServer], [key]: value },
       },
     });
   };
 
-  const addArg = (serverName: string) => {
-    if (!config) return;
-
-    const server = config.mcpServers[serverName];
-    const args = server.args || [];
-    updateServer(serverName, 'args', [...args, '']);
+  const addArg = () => {
+    if (!editing || !selectedServer) return;
+    updateServerField('args', [...(editing.mcpServers[selectedServer].args || []), '']);
   };
 
-  const updateArg = (serverName: string, index: number, value: string) => {
-    if (!config) return;
-
-    const server = config.mcpServers[serverName];
-    const args = [...(server.args || [])];
-    args[index] = value;
-    updateServer(serverName, 'args', args);
+  const updateArg = (i: number, v: string) => {
+    if (!editing || !selectedServer) return;
+    const args = [...(editing.mcpServers[selectedServer].args || [])];
+    args[i] = v;
+    updateServerField('args', args);
   };
 
-  const removeArg = (serverName: string, index: number) => {
-    if (!config) return;
-
-    const server = config.mcpServers[serverName];
-    const args = server.args?.filter((_, i) => i !== index) || [];
-    updateServer(serverName, 'args', args);
+  const removeArg = (i: number) => {
+    if (!editing || !selectedServer) return;
+    updateServerField('args', (editing.mcpServers[selectedServer].args || []).filter((_, j) => j !== i));
   };
 
-  const addEnvVar = (serverName: string) => {
-    if (!config) return;
-
-    const key = prompt('Enter environment variable name:');
+  const addEnvVar = () => {
+    if (!editing || !selectedServer) return;
+    const key = prompt('Environment variable name:');
     if (!key) return;
-
-    const server = config.mcpServers[serverName];
-    const env = { ...(server.env || {}), [key]: '' };
-    updateServer(serverName, 'env', env);
+    updateServerField('env', { ...editing.mcpServers[selectedServer].env, [key]: '' });
   };
 
-  const updateEnvVar = (serverName: string, key: string, value: string) => {
-    if (!config) return;
-
-    const server = config.mcpServers[serverName];
-    const env = { ...(server.env || {}), [key]: value };
-    updateServer(serverName, 'env', env);
+  const updateEnvVal = (k: string, v: string) => {
+    if (!editing || !selectedServer) return;
+    updateServerField('env', { ...editing.mcpServers[selectedServer].env, [k]: v });
   };
 
-  const removeEnvVar = (serverName: string, key: string) => {
-    if (!config) return;
-
-    const server = config.mcpServers[serverName];
-    const { [key]: _, ...rest } = server.env || {};
-    updateServer(serverName, 'env', rest);
+  const removeEnvVar = (k: string) => {
+    if (!editing || !selectedServer) return;
+    const { [k]: _, ...rest } = editing.mcpServers[selectedServer].env || {};
+    updateServerField('env', rest);
   };
 
-  const saveCredential = async () => {
-    if (!credentialKey || !credentialValue) return;
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-    try {
-      await (window as any).api.secure.setPassword('agent-orchestrator', credentialKey, credentialValue);
-      setShowCredentialDialog(false);
-      setCredentialKey('');
-      setCredentialValue('');
-      alert('Credential saved securely!');
-    } catch (error) {
-      console.error('Failed to save credential:', error);
-      alert('Failed to save credential');
-    }
-  };
-
-  if (!config) {
-    return <div className="loading">Loading MCP configuration...</div>;
-  }
+  const server = editing && selectedServer ? editing.mcpServers[selectedServer] : null;
 
   return (
     <div className="mcp-config">
-      <div className="config-header">
-        <h2>MCP Configuration</h2>
-        <div className="header-actions">
-          <button className="btn" onClick={() => setShowCredentialDialog(true)}>
-            🔐 Manage Credentials
-          </button>
-          <button className="btn" onClick={exportConfig}>
-            Export
-          </button>
-          <button className="btn btn-primary" onClick={saveConfig}>
-            Save
-          </button>
+      {/* ── Left panel: project list ─────────────────────────── */}
+      <div className="mcp-sidebar">
+        <div className="mcp-sidebar-header">
+          <h3>MCP Projects</h3>
+          <button className="btn btn-sm btn-primary" onClick={newProject}>+ New</button>
         </div>
+        {projects.length === 0 && (
+          <p className="mcp-empty-hint">No projects yet. Create one to get started.</p>
+        )}
+        {projects.map(p => (
+          <div
+            key={p.id}
+            className={`mcp-project-item${selectedId === p.id ? ' active' : ''}`}
+            onClick={() => setSelectedId(p.id)}
+          >
+            <span className="mcp-project-label">{p.label}</span>
+            <span className="mcp-project-platform">{PLATFORM_LABELS[p.platform as Platform] ?? p.platform}</span>
+          </div>
+        ))}
       </div>
 
-      <div className="config-content">
-        <div className="server-list">
-          <div className="list-header">
-            <h3>MCP Servers</h3>
-            <button className="btn btn-sm" onClick={addServer}>
-              + Add Server
-            </button>
+      {/* ── Right panel ──────────────────────────────────────── */}
+      <div className="mcp-main">
+        {!editing ? (
+          <div className="mcp-empty-state">
+            <p>Select a project or create a new one.</p>
           </div>
-          {Object.keys(config.mcpServers).map((serverName) => (
-            <div
-              key={serverName}
-              className={`server-item ${selectedServer === serverName ? 'active' : ''}`}
-              onClick={() => setSelectedServer(serverName)}
-            >
-              <span>{serverName}</span>
-              <button
-                className="btn btn-sm btn-danger"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeServer(serverName);
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="server-details">
-          {selectedServer && config.mcpServers[selectedServer] ? (
-            <>
-              <h3>{selectedServer}</h3>
-              <div className="form-section">
-                <div className="form-group">
-                  <label>Command</label>
+        ) : (
+          <>
+            <div className="mcp-project-header">
+              <div className="mcp-project-meta">
+                <input
+                  className="mcp-title-input"
+                  value={editing.label}
+                  onChange={e => setEditing({ ...editing, label: e.target.value })}
+                  placeholder="Project name"
+                />
+                <div className="mcp-meta-row">
+                  <label>Platform</label>
+                  <select
+                    value={editing.platform}
+                    onChange={e => setEditing({ ...editing, platform: e.target.value as Platform })}
+                  >
+                    {(Object.keys(PLATFORM_LABELS) as Platform[]).map(p => (
+                      <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mcp-meta-row">
+                  <label>Project path</label>
                   <input
-                    type="text"
-                    value={config.mcpServers[selectedServer].command}
-                    onChange={(e) => updateServer(selectedServer, 'command', e.target.value)}
-                    placeholder="e.g., node, python, npx"
+                    value={editing.projectPath}
+                    onChange={e => setEditing({ ...editing, projectPath: e.target.value })}
+                    placeholder="/path/to/your/project"
                   />
                 </div>
+                <p className="mcp-dest-hint">
+                  Deploys to: <code>{editing.projectPath || '/your/project'}/{CONFIG_FILE_PATHS[editing.platform as Platform] ?? '...'}</code>
+                </p>
+              </div>
+              <div className="mcp-project-actions">
+                <button className="btn btn-sm" onClick={deleteProject}>Delete</button>
+                <button className="btn btn-sm" onClick={saveProject}>Save</button>
+                <button className="btn btn-sm btn-primary" onClick={deployProject}>Deploy to Project</button>
+              </div>
+            </div>
 
-                <div className="form-group">
-                  <label>Arguments</label>
-                  {config.mcpServers[selectedServer].args?.map((arg, index) => (
-                    <div key={index} className="arg-item">
-                      <input
-                        type="text"
-                        value={arg}
-                        onChange={(e) => updateArg(selectedServer, index, e.target.value)}
-                        placeholder="Argument"
-                      />
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => removeArg(selectedServer, index)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  <button className="btn btn-sm" onClick={() => addArg(selectedServer)}>
-                    + Add Argument
-                  </button>
-                </div>
+            {status && (
+              <div className={`mcp-status mcp-status--${status.kind}`}>{status.msg}</div>
+            )}
 
-                <div className="form-group">
-                  <label>Environment Variables</label>
-                  {Object.entries(config.mcpServers[selectedServer].env || {}).map(
-                    ([key, value]) => (
-                      <div key={key} className="env-item">
-                        <div className="env-key">{key}</div>
-                        <input
-                          type="text"
-                          value={value}
-                          onChange={(e) => updateEnvVar(selectedServer, key, e.target.value)}
-                          placeholder="Value"
-                        />
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => removeEnvVar(selectedServer, key)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )
-                  )}
-                  <button className="btn btn-sm" onClick={() => addEnvVar(selectedServer)}>
-                    + Add Environment Variable
-                  </button>
+            <div className="mcp-servers-layout">
+              <div className="mcp-server-list">
+                <div className="mcp-server-list-header"><span>Servers</span></div>
+                {Object.keys(editing.mcpServers).map(name => (
+                  <div
+                    key={name}
+                    className={`mcp-server-item${selectedServer === name ? ' active' : ''}`}
+                    onClick={() => setSelectedServer(name)}
+                  >
+                    <span>{name}</span>
+                    <button
+                      className="btn btn-xs btn-danger"
+                      onClick={e => { e.stopPropagation(); removeServer(name); }}
+                    >×</button>
+                  </div>
+                ))}
+                <div className="mcp-add-server-row">
+                  <input
+                    value={newServerName}
+                    onChange={e => setNewServerName(e.target.value)}
+                    placeholder="Server name"
+                    onKeyDown={e => e.key === 'Enter' && addServer()}
+                  />
+                  <button className="btn btn-sm" onClick={addServer}>Add</button>
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="empty-state">
-              <p>Select a server to edit or add a new one</p>
-            </div>
-          )}
-        </div>
-      </div>
 
-      {showCredentialDialog && (
-        <div className="modal-overlay" onClick={() => setShowCredentialDialog(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Save Secure Credential</h3>
-            <div className="form-group">
-              <label>Key</label>
-              <input
-                type="text"
-                value={credentialKey}
-                onChange={(e) => setCredentialKey(e.target.value)}
-                placeholder="e.g., API_KEY, TOKEN"
-              />
+              <div className="mcp-server-detail">
+                {!server ? (
+                  <p className="mcp-empty-hint">Select a server to configure it.</p>
+                ) : (
+                  <>
+                    <div className="form-group">
+                      <label>Command</label>
+                      <input
+                        value={server.command}
+                        onChange={e => updateServerField('command', e.target.value)}
+                        placeholder="e.g. node, npx, python"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Arguments</label>
+                      {(server.args || []).map((arg, i) => (
+                        <div key={i} className="arg-item">
+                          <input value={arg} onChange={e => updateArg(i, e.target.value)} placeholder="argument" />
+                          <button className="btn btn-xs btn-danger" onClick={() => removeArg(i)}>×</button>
+                        </div>
+                      ))}
+                      <button className="btn btn-sm" onClick={addArg}>+ Add argument</button>
+                    </div>
+                    <div className="form-group">
+                      <label>Environment variables</label>
+                      {Object.entries(server.env || {}).map(([k, v]) => (
+                        <div key={k} className="env-item">
+                          <span className="env-key">{k}</span>
+                          <input value={v} onChange={e => updateEnvVal(k, e.target.value)} placeholder="value" />
+                          <button className="btn btn-xs btn-danger" onClick={() => removeEnvVar(k)}>×</button>
+                        </div>
+                      ))}
+                      <button className="btn btn-sm" onClick={addEnvVar}>+ Add env var</button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="form-group">
-              <label>Value</label>
-              <input
-                type="password"
-                value={credentialValue}
-                onChange={(e) => setCredentialValue(e.target.value)}
-                placeholder="Enter credential value"
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="btn" onClick={() => setShowCredentialDialog(false)}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={saveCredential}>
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
 export default MCPConfig;
+

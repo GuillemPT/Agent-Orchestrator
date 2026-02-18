@@ -1,4 +1,4 @@
-import { ISyncService, SyncOptions } from '@domain/interfaces/ISyncService';
+import { ISyncService, SyncOptions } from '../../domain/interfaces/ISyncService';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
