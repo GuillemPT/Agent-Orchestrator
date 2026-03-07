@@ -1,20 +1,27 @@
 import { useState, useEffect, useCallback } from 'react';
 import '../styles/Discover.css';
-import type { GistItem } from '../types/electron';
+import type { GitSnippet, ProviderType, GitUser } from '../types/electron';
 
 type Tab = 'browse' | 'publish';
+
+const PROVIDER_LABELS: Record<ProviderType, string> = {
+  github: 'GitHub Gists',
+  gitlab: 'GitLab Snippets',
+  bitbucket: 'Bitbucket Snippets',
+};
 
 interface Agent { id: string; metadata: { name: string; description?: string } }
 interface Skill { id: string; metadata: { name: string } }
 
 function Discover() {
   const [tab, setTab] = useState<Tab>('browse');
-  const [ghConnected, setGhConnected] = useState(false);
+  const [connectedProviders, setConnectedProviders] = useState<{ type: ProviderType; user: GitUser }[]>([]);
+  const [activeProvider, setActiveProvider] = useState<ProviderType>('github');
 
   // ── Browse state ─────────────────────────────────────────────────────────
-  const [gists, setGists] = useState<GistItem[]>([]);
+  const [snippets, setSnippets] = useState<GitSnippet[]>([]);
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<{ gist: GistItem; rawContent: string; filename: string } | null>(null);
+  const [preview, setPreview] = useState<{ snippet: GitSnippet; rawContent: string; filename: string } | null>(null);
   const [importing, setImporting] = useState(false);
 
   // ── Publish state ─────────────────────────────────────────────────────────
@@ -25,14 +32,25 @@ function Discover() {
   const [publishing, setPublishing] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState('');
   const [publishStatus, setPublishStatus] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
+  const [publishProvider, setPublishProvider] = useState<ProviderType>('github');
 
   useEffect(() => {
-    window.api.github.getUser()
-      .then(u => setGhConnected(!!u))
-      .catch(() => setGhConnected(false));
+    window.api.gitProvider.getConnectedAccounts()
+      .then(accounts => {
+        setConnectedProviders(accounts);
+        if (accounts.length > 0) {
+          setActiveProvider(accounts[0].type);
+          setPublishProvider(accounts[0].type);
+        }
+      })
+      .catch(() => setConnectedProviders([]));
     window.api.agent.getAll().then(setAgents).catch(console.error);
     window.api.skill.getAll().then(setSkills).catch(console.error);
   }, []);
+
+  const isConnected = useCallback((provider: ProviderType) => 
+    connectedProviders.some(p => p.type === provider)
+  , [connectedProviders]);
 
   const showPublishStatus = (msg: string, kind: 'ok' | 'err' = 'ok') => {
     setPublishStatus({ msg, kind });
@@ -42,29 +60,37 @@ function Discover() {
   // ── Browse actions ────────────────────────────────────────────────────────
 
   const loadMarketplace = useCallback(async () => {
+    if (!isConnected(activeProvider)) return;
     setLoading(true);
     try {
-      setGists(await window.api.github.getMarketplaceGists());
+      const items = await window.api.gitProvider.listMarketplaceSnippets(activeProvider);
+      setSnippets(items);
     } catch {
-      setGists([]);
+      setSnippets([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeProvider, isConnected]);
 
   useEffect(() => {
-    if (tab === 'browse' && ghConnected) loadMarketplace();
-  }, [tab, ghConnected, loadMarketplace]);
+    if (tab === 'browse' && isConnected(activeProvider)) loadMarketplace();
+  }, [tab, activeProvider, isConnected, loadMarketplace]);
 
-  const openPreview = async (gist: GistItem) => {
-    const firstFile = Object.values(gist.files)[0];
+  const openPreview = async (snippet: GitSnippet) => {
+    const firstFile = Object.values(snippet.files)[0];
     if (!firstFile) return;
     let content = firstFile.content ?? '';
-    if (!content && firstFile.raw_url) {
-      try { content = await fetch(firstFile.raw_url).then(r => r.text()); }
-      catch { content = '(failed to load content)'; }
+    // If content not included, fetch the full snippet
+    if (!content) {
+      try {
+        const full = await window.api.gitProvider.getSnippet(snippet.provider, snippet.id);
+        const fullFile = Object.values(full.files)[0];
+        content = fullFile?.content ?? '(failed to load content)';
+      } catch {
+        content = '(failed to load content)';
+      }
     }
-    setPreview({ gist, rawContent: content, filename: firstFile.filename });
+    setPreview({ snippet, rawContent: content, filename: firstFile.filename });
   };
 
   const importAsAgent = async () => {
@@ -80,9 +106,9 @@ function Discover() {
 
       await window.api.agent.create({
         metadata: {
-          name: nameMatch?.[1]?.trim() || preview.gist.description.replace('[agent-orchestrator]', '').trim() || 'Imported Agent',
+          name: nameMatch?.[1]?.trim() || preview.snippet.description.replace('[agent-orchestrator]', '').trim() || 'Imported Agent',
           description: descMatch?.[1]?.trim() || '',
-          tags: ['imported'],
+          tags: ['imported', `from-${preview.snippet.provider}`],
           version: '1.0.0',
         },
         instructions: body,
@@ -111,8 +137,12 @@ function Discover() {
 
   // ── Publish actions ───────────────────────────────────────────────────────
 
-  const publishToGist = async () => {
+  const publishToProvider = async () => {
     if (!publishId) { showPublishStatus('Select an item to publish', 'err'); return; }
+    if (!isConnected(publishProvider)) {
+      showPublishStatus(`Not connected to ${PROVIDER_LABELS[publishProvider]}. Go to Settings to connect.`, 'err');
+      return;
+    }
     setPublishing(true);
     setPublishedUrl('');
     try {
@@ -120,24 +150,28 @@ function Discover() {
         const agent = await window.api.agent.getById(publishId);
         const content = await window.api.agent.exportToMd(agent, 'github-copilot');
         const slugName = (agent.metadata?.name || 'agent').replace(/\s+/g, '-').toLowerCase();
-        const gist = await window.api.github.publishGist(
+        const snippet = await window.api.gitProvider.publishSnippet(
+          publishProvider,
           `[agent-orchestrator] ${agent.metadata?.name}`,
           [{ filename: `${slugName}.agent.md`, content }],
+          true,
         );
-        setPublishedUrl(gist.html_url);
-        showPublishStatus('Published!');
+        setPublishedUrl(snippet.html_url);
+        showPublishStatus(`Published to ${PROVIDER_LABELS[publishProvider]}!`);
       } else {
         const allSkills: Skill[] = await window.api.skill.getAll();
         const skill = allSkills.find(s => s.id === publishId);
         if (!skill) throw new Error('Skill not found');
         const content = await window.api.skill.exportToMd(skill as any, 'github-copilot');
         const slugName = (skill.metadata?.name || 'skill').replace(/\s+/g, '-').toLowerCase();
-        const gist = await window.api.github.publishGist(
+        const snippet = await window.api.gitProvider.publishSnippet(
+          publishProvider,
           `[agent-orchestrator] skill: ${skill.metadata?.name}`,
           [{ filename: `${slugName}.skill.md`, content }],
+          true,
         );
-        setPublishedUrl(gist.html_url);
-        showPublishStatus('Published!');
+        setPublishedUrl(snippet.html_url);
+        showPublishStatus(`Published to ${PROVIDER_LABELS[publishProvider]}!`);
       }
     } catch (e) {
       showPublishStatus(`Publish failed: ${e}`, 'err');
@@ -156,7 +190,7 @@ function Discover() {
     <div className="discover-layout">
       <div className="discover-header">
         <h2>Discover</h2>
-        <p className="discover-subtitle">Browse the Agent Orchestrator marketplace powered by GitHub Gists.</p>
+        <p className="discover-subtitle">Browse the Agent Orchestrator marketplace across multiple providers.</p>
         <div className="ws-tabs">
           <button className={`ws-tab${tab === 'browse' ? ' active' : ''}`} onClick={() => setTab('browse')}>Browse Marketplace</button>
           <button className={`ws-tab${tab === 'publish' ? ' active' : ''}`} onClick={() => setTab('publish')}>Publish</button>
@@ -164,46 +198,63 @@ function Discover() {
       </div>
 
       <div className="discover-body">
-        {!ghConnected && (
+        {connectedProviders.length === 0 && (
           <div className="discover-no-auth">
-            Connect your GitHub account (via the sidebar) to browse and publish agents.
+            Connect a provider account (via Settings) to browse and publish agents.
           </div>
         )}
 
         {/* ── Browse tab ─────────────────────────────────────────── */}
-        {tab === 'browse' && ghConnected && (
+        {tab === 'browse' && connectedProviders.length > 0 && (
           <>
             <div className="discover-toolbar">
+              <div className="provider-filter">
+                <label>Provider:</label>
+                <select 
+                  value={activeProvider} 
+                  onChange={e => setActiveProvider(e.target.value as ProviderType)}
+                  disabled={loading}
+                >
+                  {(['github', 'gitlab', 'bitbucket'] as ProviderType[]).map(p => {
+                    const connected = isConnected(p);
+                    return (
+                      <option key={p} value={p} disabled={!connected}>
+                        {PROVIDER_LABELS[p]}{connected ? '' : ' (not connected)'}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
               <button className="btn" onClick={loadMarketplace} disabled={loading}>
                 {loading ? 'Loading…' : 'Refresh'}
               </button>
-              <span className="discover-count">{gists.length} item{gists.length !== 1 ? 's' : ''}</span>
+              <span className="discover-count">{snippets.length} item{snippets.length !== 1 ? 's' : ''}</span>
             </div>
 
-            {gists.length === 0 && !loading && (
+            {snippets.length === 0 && !loading && (
               <div className="discover-empty">
-                No marketplace gists found. Be the first to publish one!
+                No marketplace snippets found. Be the first to publish one!
               </div>
             )}
 
             <div className="discover-grid">
-              {gists.map(g => (
-                <div key={g.id} className="discover-card">
+              {snippets.map(s => (
+                <div key={s.id} className="discover-card">
                   <div className="discover-card-title">
-                    {g.description.replace('[agent-orchestrator]', '').trim() || 'Untitled'}
+                    {s.description.replace('[agent-orchestrator]', '').trim() || 'Untitled'}
                   </div>
                   <div className="discover-card-meta">
-                    <span className="discover-author">{g.owner?.login ?? 'unknown'}</span>
-                    <span className="discover-date">{formatDate(g.created_at)}</span>
+                    <span className="discover-author">{s.owner_login ?? 'unknown'}</span>
+                    <span className="discover-date">{formatDate(s.created_at)}</span>
                   </div>
                   <div className="discover-card-files">
-                    {Object.keys(g.files).map(f => (
+                    {Object.keys(s.files).map(f => (
                       <span key={f} className="tag">{f.endsWith('.agent.md') ? 'agent' : f.endsWith('.skill.md') ? 'skill' : f}</span>
                     ))}
                   </div>
                   <div className="discover-card-actions">
-                    <a href={g.html_url} target="_blank" rel="noreferrer" className="btn btn-xs">View Gist</a>
-                    <button className="btn btn-xs btn-primary" onClick={() => openPreview(g)}>Preview & Import</button>
+                    <a href={s.html_url} target="_blank" rel="noreferrer" className="btn btn-xs">View</a>
+                    <button className="btn btn-xs btn-primary" onClick={() => openPreview(s)}>Preview & Import</button>
                   </div>
                 </div>
               ))}
@@ -214,11 +265,29 @@ function Discover() {
         {/* ── Publish tab ─────────────────────────────────────────── */}
         {tab === 'publish' && (
           <div className="discover-publish">
-            {!ghConnected ? (
-              <p className="help-text">Connect GitHub to publish.</p>
+            {connectedProviders.length === 0 ? (
+              <p className="help-text">Connect a provider in Settings to publish.</p>
             ) : (
               <>
                 <div className="discover-publish-form">
+                  <div className="form-group">
+                    <label>Publish to</label>
+                    <select
+                      value={publishProvider}
+                      onChange={e => setPublishProvider(e.target.value as ProviderType)}
+                      disabled={publishing}
+                    >
+                      {(['github', 'gitlab', 'bitbucket'] as ProviderType[]).map(p => {
+                        const connected = isConnected(p);
+                        const account = connectedProviders.find(cp => cp.type === p);
+                        return (
+                          <option key={p} value={p} disabled={!connected}>
+                            {PROVIDER_LABELS[p]}{connected ? ` (${account?.user.login})` : ' (not connected)'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
                   <div className="form-group">
                     <label>What to publish</label>
                     <div className="discover-type-row">
@@ -243,8 +312,8 @@ function Discover() {
                     </select>
                   </div>
 
-                  <button className="btn btn-primary" onClick={publishToGist} disabled={publishing || !publishId}>
-                    {publishing ? 'Publishing…' : 'Publish as GitHub Gist'}
+                  <button className="btn btn-primary" onClick={publishToProvider} disabled={publishing || !publishId}>
+                    {publishing ? 'Publishing…' : `Publish to ${PROVIDER_LABELS[publishProvider]}`}
                   </button>
 
                   {publishStatus && (
@@ -261,8 +330,8 @@ function Discover() {
                 <div className="discover-publish-info">
                   <h4>How it works</h4>
                   <ul>
-                    <li>Your agent/skill is exported as a Markdown file and published as a public GitHub Gist.</li>
-                    <li>The Gist is tagged with <code>[agent-orchestrator]</code> so others can find it.</li>
+                    <li>Your agent/skill is exported as a Markdown file and published as a public snippet.</li>
+                    <li>The snippet is tagged with <code>[agent-orchestrator]</code> so others can find it.</li>
                     <li>Anyone using Agent Orchestrator can browse and import your agents.</li>
                   </ul>
                 </div>

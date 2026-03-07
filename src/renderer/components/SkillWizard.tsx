@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
+import Editor from '@monaco-editor/react';
+import GenerateModal from './GenerateModal';
 import '../styles/SkillWizard.css';
+import type { ProviderType, GitUser } from '../types/electron';
+import { api } from '../api';
+
+const IS_WEB = import.meta.env.VITE_MODE === 'web';
 
 type Platform = 'github-copilot' | 'claude' | 'cursor' | 'antigravity' | 'opencode';
 
@@ -11,8 +17,15 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   opencode: 'OpenCode',
 };
 
+const PROVIDER_LABELS: Record<ProviderType, string> = {
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket',
+};
+
 interface Skill {
   id: string;
+  projectId?: string;
   metadata: {
     name: string;
     version: string;
@@ -31,7 +44,11 @@ interface Skill {
   }[];
 }
 
-function SkillWizard() {
+interface SkillWizardProps {
+  projectId: string | null;
+}
+
+function SkillWizard({ projectId }: SkillWizardProps) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [currentSkill, setCurrentSkill] = useState<Skill | null>(null);
   const [step, setStep] = useState<'metadata' | 'markdown' | 'yaml' | 'scripts'>('metadata');
@@ -41,6 +58,7 @@ function SkillWizard() {
 
   // PR modal state
   const [showPRModal, setShowPRModal] = useState(false);
+  const [prProvider, setPrProvider] = useState<ProviderType>('github');
   const [prOwnerRepo, setPrOwnerRepo] = useState('');
   const [prHead, setPrHead] = useState('');
   const [prBase, setPrBase] = useState('main');
@@ -49,15 +67,43 @@ function SkillWizard() {
   const [prCreating, setPrCreating] = useState(false);
   const [prResult, setPrResult] = useState<{ url: string; number: number } | null>(null);
   const [prError, setPrError] = useState<string | null>(null);
+  const [connectedProviders, setConnectedProviders] = useState<{ type: ProviderType; user: GitUser }[]>([]);
+  const [allProjects, setAllProjects] = useState<{ id: string; name: string }[]>([]);
+  const [contextMenuSkillId, setContextMenuSkillId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   useEffect(() => {
     loadSkills();
+    api.project.getAll()
+      .then(ps => setAllProjects(ps))
+      .catch(() => {});
+    api.gitProvider.getConnectedAccounts()
+      .then(accounts => {
+        setConnectedProviders(accounts);
+        if (accounts.length > 0 && !accounts.find(a => a.type === prProvider)) {
+          setPrProvider(accounts[0].type);
+        }
+      })
+      .catch(() => setConnectedProviders([]));
   }, []);
+
+  // Reload skills when project changes
+  useEffect(() => {
+    loadSkills();
+    setCurrentSkill(null);
+  }, [projectId]);
 
   const loadSkills = async () => {
     try {
-      const loadedSkills = await window.api.skill.getAll();
-      setSkills(loadedSkills);
+      const allSkills = await api.skill.getAll();
+      // Filter skills by projectId
+      // null   → "All Projects" view: show every skill
+      // string → specific project: show only skills belonging to it
+      const filtered = projectId === null
+        ? allSkills
+        : allSkills.filter((s: Skill) => s.projectId === projectId);
+      setSkills(filtered);
     } catch (error) {
       console.error('Failed to load skills:', error);
     }
@@ -65,7 +111,8 @@ function SkillWizard() {
 
   const createNewSkill = async () => {
     try {
-      const newSkill = await window.api.skill.create({
+      const newSkill = await api.skill.create({
+        projectId: projectId ?? undefined,  // Assign to current project
         metadata: {
           name: 'New Skill',
           version: '1.0.0',
@@ -85,7 +132,7 @@ function SkillWizard() {
     if (!currentSkill) return;
 
     try {
-      await window.api.skill.update(currentSkill.id, currentSkill);
+      await api.skill.update(currentSkill.id, currentSkill);
       loadSkills();
     } catch (error) {
       console.error('Failed to save skill:', error);
@@ -97,7 +144,7 @@ function SkillWizard() {
 
     if (confirm(`Are you sure you want to delete "${currentSkill.metadata.name}"?`)) {
       try {
-        await window.api.skill.delete(currentSkill.id);
+        await api.skill.delete(currentSkill.id);
         setCurrentSkill(null);
         loadSkills();
       } catch (error) {
@@ -110,7 +157,7 @@ function SkillWizard() {
     if (!currentSkill) return;
 
     try {
-      const content = await window.api.skill.exportToMd(currentSkill, exportPlatform);
+      const content = await api.skill.exportToMd(currentSkill, exportPlatform);
       const isJson = exportPlatform === 'antigravity';
       const isMdc = exportPlatform === 'cursor';
       const ext = isJson ? '.json' : isMdc ? '.mdc' : '.md';
@@ -130,7 +177,7 @@ function SkillWizard() {
     if (!currentSkill) return;
 
     try {
-      const yaml = await window.api.skill.exportToYaml(currentSkill);
+      const yaml = await api.skill.exportToYaml(currentSkill);
       const blob = new Blob([yaml], { type: 'text/yaml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -151,7 +198,7 @@ function SkillWizard() {
       const basePath = prompt('Enter the base path where the skill directory should be created:', '.github/skills');
       if (!basePath) return;
 
-      await window.api.skill.createDirectory(currentSkill, basePath);
+      await api.skill.createDirectory(currentSkill, basePath);
       alert(`Skill directory created successfully at ${basePath}/${currentSkill.metadata.name.toLowerCase().replace(/\s+/g, '-')}`);
     } catch (error) {
       console.error('Failed to create skill directory:', error);
@@ -164,7 +211,7 @@ function SkillWizard() {
 
     try {
       setIsValidating(true);
-      const validation = await window.api.skill.validateDescription(currentSkill.metadata.description);
+      const validation = await api.skill.validateDescription(currentSkill.metadata.description);
       setDescriptionValidation(validation);
     } catch (error) {
       console.error('Failed to validate description:', error);
@@ -191,17 +238,22 @@ function SkillWizard() {
       setPrError('Please fill in all required fields (owner/repo, head branch, title).');
       return;
     }
+    if (!connectedProviders.find(p => p.type === prProvider)) {
+      setPrError(`Not connected to ${PROVIDER_LABELS[prProvider]}. Go to Settings to connect.`);
+      return;
+    }
     setPrCreating(true);
     setPrError(null);
     try {
       const name = currentSkill.metadata.name.replace(/\s+/g, '-').toLowerCase();
-      const content = await window.api.skill.exportToMd(currentSkill, 'github-copilot');
-      await window.api.github.pushFiles(
+      const content = await api.skill.exportToMd(currentSkill, 'github-copilot');
+      await api.gitProvider.pushFiles(
+        prProvider,
         owner, repo, prBase, prHead,
         [{ path: `.github/instructions/${name}.instructions.md`, content }],
         `chore: add ${currentSkill.metadata.name} skill config`,
       );
-      const result = await window.api.github.createPR({ owner, repo, head: prHead, base: prBase, title: prTitle, body: prBody });
+      const result = await api.gitProvider.createPR(prProvider, { owner, repo, head: prHead, base: prBase, title: prTitle, body: prBody });
       setPrResult(result);
     } catch (e: any) {
       setPrError(e?.message || String(e));
@@ -247,11 +299,72 @@ function SkillWizard() {
     setCurrentSkill({ ...currentSkill, scripts });
   };
 
+  // Auto-save in web mode (debounced, 1 s)
+  useEffect(() => {
+    if (!IS_WEB || !currentSkill) return;
+    setSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      try {
+        await api.skill.update(currentSkill.id, currentSkill);
+        setSaveStatus('saved');
+      } catch {
+        setSaveStatus('idle');
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [currentSkill]);
+
+  const handleMoveSkill = async (skillToMoveId: string, targetProjectId: string | null) => {
+    try {
+      const skill = skills.find(s => s.id === skillToMoveId);
+      if (!skill) return;
+      await api.skill.update(skillToMoveId, { ...skill, projectId: targetProjectId ?? undefined });
+      setContextMenuSkillId(null);
+      loadSkills();
+    } catch (error) {
+      console.error('Failed to move skill:', error);
+    }
+  };
+
+  const handleCopySkill = async (skillToCopy: Skill, targetProjectId: string | null) => {
+    try {
+      await api.skill.create({
+        ...skillToCopy,
+        projectId: targetProjectId ?? undefined,
+        metadata: { ...skillToCopy.metadata, name: `${skillToCopy.metadata.name} (copy)` },
+      });
+      setContextMenuSkillId(null);
+      loadSkills();
+    } catch (error) {
+      console.error('Failed to copy skill:', error);
+    }
+  };
+
+  const handleGenerated = async (result: any) => {
+    try {
+      const newSkill = await api.skill.create({
+        projectId: projectId ?? undefined,
+        ...result,
+      });
+      setSkills(prev => [...prev, newSkill]);
+      setCurrentSkill(newSkill);
+      setStep('markdown');
+      setShowGenerateModal(false);
+    } catch (error) {
+      console.error('Failed to save generated skill:', error);
+    }
+  };
+
   return (
     <div className="skill-wizard">
       <div className="wizard-header">
         <h2>Skill Wizard</h2>
         <div className="header-actions">
+          {IS_WEB && (
+            <button className="btn" onClick={() => setShowGenerateModal(true)}>
+              ✨ Generate
+            </button>
+          )}
           <button className="btn btn-primary" onClick={createNewSkill}>
             + New Skill
           </button>
@@ -267,8 +380,36 @@ function SkillWizard() {
               className={`skill-item ${currentSkill?.id === skill.id ? 'active' : ''}`}
               onClick={() => setCurrentSkill(skill)}
             >
-              <div className="skill-name">{skill.metadata.name}</div>
+              <div className="skill-item-row">
+                <div className="skill-name">{skill.metadata.name}</div>
+                <button
+                  className="skill-context-btn"
+                  title="Move / Copy"
+                  onClick={e => { e.stopPropagation(); setContextMenuSkillId(contextMenuSkillId === skill.id ? null : skill.id); }}
+                >
+                  ⋮
+                </button>
+              </div>
               <div className="skill-version">{skill.metadata.version}</div>
+              {contextMenuSkillId === skill.id && (
+                <div className="skill-context-menu" onClick={e => e.stopPropagation()}>
+                  <div className="context-menu-section">Move to project</div>
+                  <button className="context-menu-item" onClick={() => handleMoveSkill(skill.id, null)}>🌐 No project</button>
+                  {allProjects.filter(p => p.id !== skill.projectId).map(p => (
+                    <button key={p.id} className="context-menu-item" onClick={() => handleMoveSkill(skill.id, p.id)}>
+                      📁 {p.name}
+                    </button>
+                  ))}
+                  <div className="context-menu-divider" />
+                  <div className="context-menu-section">Copy to project</div>
+                  <button className="context-menu-item" onClick={() => handleCopySkill(skill, null)}>🌐 No project</button>
+                  {allProjects.map(p => (
+                    <button key={p.id} className="context-menu-item" onClick={() => handleCopySkill(skill, p.id)}>
+                      📁 {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -395,13 +536,15 @@ function SkillWizard() {
 
                 {step === 'markdown' && (
                   <div className="form-section">
-                    <h4>Skill Documentation (Markdown)</h4>
-                    <div className="form-group">
-                      <textarea
+                    <h4>Skill Documentation (Markdown) {IS_WEB && <span className="save-status">{saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : ''}</span>}</h4>
+                    <div className="form-group monaco-field">
+                      <Editor
+                        height="340px"
+                        language="markdown"
+                        theme="vs-dark"
                         value={currentSkill.markdown || ''}
-                        onChange={(e) => updateField(['markdown'], e.target.value)}
-                        rows={15}
-                        placeholder="Enter markdown documentation for this skill..."
+                        options={{ minimap: { enabled: false }, wordWrap: 'on', scrollBeyondLastLine: false }}
+                        onChange={value => updateField(['markdown'], value ?? '')}
                       />
                     </div>
                   </div>
@@ -497,7 +640,7 @@ function SkillWizard() {
         <div className="modal-overlay" onClick={() => !prCreating && setShowPRModal(false)}>
           <div className="modal-content pr-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Create GitHub Pull Request</h3>
+              <h3>Create Pull Request</h3>
               <button className="modal-close" onClick={() => setShowPRModal(false)} disabled={prCreating}>✕</button>
             </div>
 
@@ -505,17 +648,38 @@ function SkillWizard() {
               <div className="pr-success">
                 <p>✅ Pull Request <strong>#{prResult.number}</strong> created successfully!</p>
                 <a href={prResult.url} target="_blank" rel="noreferrer" className="btn btn-primary">
-                  View PR on GitHub
+                  View PR on {PROVIDER_LABELS[prProvider]}
                 </a>
                 <button className="btn" onClick={() => setShowPRModal(false)} style={{ marginLeft: '8px' }}>Close</button>
               </div>
             ) : (
               <div className="pr-form">
                 <div className="form-group">
+                  <label>Provider <span className="required">*</span></label>
+                  <select
+                    value={prProvider}
+                    onChange={e => setPrProvider(e.target.value as ProviderType)}
+                    disabled={prCreating}
+                    className="provider-select"
+                  >
+                    {(['github', 'gitlab', 'bitbucket'] as ProviderType[]).map(p => {
+                      const connected = connectedProviders.find(cp => cp.type === p);
+                      return (
+                        <option key={p} value={p} disabled={!connected}>
+                          {PROVIDER_LABELS[p]}{connected ? ` (${connected.user.login})` : ' (not connected)'}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {connectedProviders.length === 0 && (
+                    <p className="hint-text">No providers connected. Go to Settings to connect.</p>
+                  )}
+                </div>
+                <div className="form-group">
                   <label>Repository <span className="required">*</span></label>
                   <input
                     type="text"
-                    placeholder="owner/repo"
+                    placeholder={prProvider === 'bitbucket' ? 'workspace/repo' : 'owner/repo'}
                     value={prOwnerRepo}
                     onChange={e => setPrOwnerRepo(e.target.value)}
                     disabled={prCreating}
@@ -572,6 +736,15 @@ function SkillWizard() {
             )}
           </div>
         </div>
+      )}
+
+      {showGenerateModal && (
+        <GenerateModal
+          type="skill"
+          onClose={() => setShowGenerateModal(false)}
+          onGenerated={handleGenerated}
+          generateFn={api.generate.skill}
+        />
       )}
     </div>
   );

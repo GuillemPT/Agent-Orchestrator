@@ -224,7 +224,7 @@ function GitPanel() {
                 onChange={(e) => setCommitMessage(e.target.value)}
                 placeholder="Enter commit message..."
                 rows={3}
-                disabled={isCommitting}
+                disabled={commitAction !== 'idle'}
               />
             </div>
 

@@ -1,0 +1,433 @@
+.project-selector {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.project-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.project-selector-trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color-hover);
+}
+
+.project-icon {
+  flex-shrink: 0;
+}
+
+.project-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.project-chevron {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* ── Per-project option row with inline menu ─────────────────────────────── */
+.project-option-row {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+.project-option-main {
+  flex: 1;
+}
+.project-option-menu-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0 8px;
+  cursor: pointer;
+  opacity: 0;
+  border-radius: 4px;
+  transition: opacity 0.15s, background 0.15s;
+}
+.project-option-row:hover .project-option-menu-btn {
+  opacity: 1;
+}
+.project-option-inline-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 1100;
+  min-width: 140px;
+}
+.project-option-inline-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+.project-option-inline-item:hover { background: var(--hover-bg, rgba(255,255,255,0.06)); }
+.project-option-delete { color: #f87171; }
+.project-option-delete:hover { background: rgba(248,113,113,0.1); }
+
+.project-selector-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.project-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: background-color 0.1s;
+}
+
+.project-option:hover {
+  background: var(--bg-hover);
+}
+
+.project-option.active {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.project-option-icon {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.project-option-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.project-option-empty {
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.project-option-create {
+  color: var(--accent-blue);
+}
+
+.project-option-create:hover {
+  background: rgba(0, 120, 212, 0.1);
+}
+
+.project-create-form {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-create-form input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.project-create-form input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.project-create-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ── Import Section ───────────────────────────────────────────────────────── */
+.project-option-import {
+  color: var(--accent-green);
+}
+
+.project-option-import:hover {
+  background: rgba(46, 160, 67, 0.1);
+}
+
+.project-import-section {
+  padding: 8px;
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.project-import-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.project-import-search {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.project-import-search:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.project-import-loading {
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.project-import-empty {
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.project-import-repos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-import-repo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+
+.project-import-repo:hover {
+  background: var(--bg-hover);
+}
+
+.project-import-repo.selected {
+  background: rgba(0, 120, 212, 0.1);
+  border-color: var(--accent-blue);
+}
+
+.project-import-checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--accent-blue);
+}
+
+.project-import-repo-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.project-import-repo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.project-import-repo-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-import-repo-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-import-more {
+  padding: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: center;
+}
+
+.project-import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border-color);
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-secondary);
+}
+
+.project-import-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ── Import Modal ───────────────────────────────────────────────────────── */
+.import-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.import-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  width: 540px;
+  max-width: 90vw;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.import-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.import-modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.import-modal-close {
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+.import-modal-search-row {
+  padding: 12px 16px 8px;
+  flex-shrink: 0;
+}
+
+.import-modal-search-row .project-import-search {
+  margin-bottom: 0;
+}
+
+.import-modal-repos {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+
+.import-modal-empty {
+  padding: 32px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.import-modal-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.import-modal-page-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 50px;
+  text-align: center;
+}
+
+.import-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-radius: 0 0 8px 8px;
+}
+
+.import-modal-footer-actions {
+  display: flex;
+  gap: 8px;
+}

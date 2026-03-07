@@ -30,6 +30,7 @@ export interface MCPServer {
 
 export interface Agent {
   id: string;
+  projectId?: string;          // Optional: links agent to a project
   metadata: AgentMetadata;
   skills: AgentSkill[];
   mcpConfig: AgentMCPConfig;
@@ -46,14 +47,15 @@ export class AgentEntity implements Agent {
     public mcpConfig: AgentMCPConfig,
     public instructions?: string,
     public createdAt: Date = new Date(),
-    public updatedAt: Date = new Date()
+    public updatedAt: Date = new Date(),
+    public projectId?: string
   ) {}
 
   static create(data: Partial<Agent>): AgentEntity {
     const id = data.id || crypto.randomUUID();
     const now = new Date();
     
-    return new AgentEntity(
+    const entity = new AgentEntity(
       id,
       data.metadata || {
         name: 'New Agent',
@@ -65,8 +67,10 @@ export class AgentEntity implements Agent {
       data.mcpConfig || { tools: [], target: '' },
       data.instructions,
       data.createdAt || now,
-      data.updatedAt || now
+      data.updatedAt || now,
+      data.projectId
     );
+    return entity;
   }
 
   addSkill(skill: AgentSkill): void {

@@ -1,8 +1,20 @@
 import { useState, useEffect } from 'react';
+import Editor from '@monaco-editor/react';
 import ToolSelector from './ToolSelector';
+import GenerateModal from './GenerateModal';
 import '../styles/AgentEditor.css';
+import type { ProviderType, GitUser } from '../types/electron';
+import { api } from '../api';
+
+const IS_WEB = import.meta.env.VITE_MODE === 'web';
 
 type Platform = 'github-copilot' | 'claude' | 'cursor' | 'antigravity' | 'opencode';
+
+const PROVIDER_LABELS: Record<ProviderType, string> = {
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket',
+};
 
 const PLATFORM_LABELS: Record<Platform, string> = {
   'github-copilot': 'GitHub Copilot',
@@ -22,6 +34,7 @@ const PLATFORM_FILENAMES: Record<Platform, string> = {
 
 interface Agent {
   id: string;
+  projectId?: string;
   metadata: {
     name: string;
     version: string;
@@ -41,9 +54,10 @@ interface Agent {
 interface AgentEditorProps {
   agentId: string | null;
   onAgentChange: (id: string | null) => void;
+  projectId: string | null;
 }
 
-function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
+function AgentEditor({ agentId, onAgentChange, projectId }: AgentEditorProps) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [currentAgent, setCurrentAgent] = useState<Agent | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -52,6 +66,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
   // PR modal state
   const [showPRModal, setShowPRModal] = useState(false);
+  const [prProvider, setPrProvider] = useState<ProviderType>('github');
   const [prOwnerRepo, setPrOwnerRepo] = useState('');
   const [prHead, setPrHead] = useState('');
   const [prBase, setPrBase] = useState('main');
@@ -60,6 +75,43 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
   const [prCreating, setPrCreating] = useState(false);
   const [prResult, setPrResult] = useState<{ url: string; number: number } | null>(null);
   const [prError, setPrError] = useState<string | null>(null);
+  const [connectedProviders, setConnectedProviders] = useState<{ type: ProviderType; user: GitUser }[]>([]);
+  const [allProjects, setAllProjects] = useState<{ id: string; name: string }[]>([]);
+  const [contextMenuAgentId, setContextMenuAgentId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+
+  // Auto-save in web mode (debounced, 1 s)
+  useEffect(() => {
+    if (!IS_WEB || !currentAgent || !isEditing) return;
+    setSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      try {
+        await api.agent.update(currentAgent.id, currentAgent);
+        setSaveStatus('saved');
+      } catch {
+        setSaveStatus('idle');
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [currentAgent, isEditing]);
+
+  useEffect(() => {
+    api.project.getAll()
+      .then(ps => setAllProjects(ps))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api.gitProvider.getConnectedAccounts()
+      .then(accounts => {
+        setConnectedProviders(accounts);
+        if (accounts.length > 0 && !accounts.find(a => a.type === prProvider)) {
+          setPrProvider(accounts[0].type);
+        }
+      })
+      .catch(() => setConnectedProviders([]));
+  }, []);
 
   useEffect(() => {
     loadAgents();
@@ -77,10 +129,23 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
     }
   }, [agentId]);
 
+  // Reload agents when project changes
+  useEffect(() => {
+    loadAgents();
+    setCurrentAgent(null);
+    onAgentChange(null);
+  }, [projectId]);
+
   const loadAgents = async () => {
     try {
-      const loadedAgents = await window.api.agent.getAll();
-      setAgents(loadedAgents);
+      const allAgents = await api.agent.getAll();
+      // Filter agents by projectId
+      // null   → "All Projects" view: show every agent
+      // string → specific project: show only agents belonging to it
+      const filtered = projectId === null
+        ? allAgents
+        : allAgents.filter((a: Agent) => a.projectId === projectId);
+      setAgents(filtered);
     } catch (error) {
       console.error('Failed to load agents:', error);
     }
@@ -88,7 +153,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
   const loadAgent = async (id: string) => {
     try {
-      const agent = await window.api.agent.getById(id);
+      const agent = await api.agent.getById(id);
       setCurrentAgent(agent);
     } catch (error) {
       console.error('Failed to load agent:', error);
@@ -97,7 +162,8 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
   const createNewAgent = async () => {
     try {
-      const newAgent = await window.api.agent.create({
+      const newAgent = await api.agent.create({
+        projectId: projectId ?? undefined,  // Assign to current project
         metadata: {
           name: 'New Agent',
           version: '1.0.0',
@@ -119,7 +185,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
     if (!currentAgent) return;
 
     try {
-      await window.api.agent.update(currentAgent.id, currentAgent);
+      await api.agent.update(currentAgent.id, currentAgent);
       setIsEditing(false);
       loadAgents();
     } catch (error) {
@@ -132,7 +198,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
 
     if (confirm(`Are you sure you want to delete "${currentAgent.metadata.name}"?`)) {
       try {
-        await window.api.agent.delete(currentAgent.id);
+        await api.agent.delete(currentAgent.id);
         setCurrentAgent(null);
         onAgentChange(null);
         loadAgents();
@@ -146,7 +212,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
     if (!currentAgent) return;
 
     try {
-      const content = await window.api.agent.exportToMd(currentAgent, exportPlatform);
+      const content = await api.agent.exportToMd(currentAgent, exportPlatform);
       const isJson = exportPlatform === 'antigravity';
       const mimeType = isJson ? 'application/json' : 'text/markdown';
       const filename = PLATFORM_FILENAMES[exportPlatform].replace('{name}', currentAgent.metadata.name);
@@ -179,17 +245,22 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
       setPrError('Please fill in all required fields (owner/repo, head branch, title).');
       return;
     }
+    if (!connectedProviders.find(p => p.type === prProvider)) {
+      setPrError(`Not connected to ${PROVIDER_LABELS[prProvider]}. Go to Settings to connect.`);
+      return;
+    }
     setPrCreating(true);
     setPrError(null);
     try {
-      // Export agent markdown and push to branch via GitHub API
-      const content = await window.api.agent.exportToMd(currentAgent, 'github-copilot');
-      await window.api.github.pushFiles(
+      // Export agent markdown and push to branch via the selected provider
+      const content = await api.agent.exportToMd(currentAgent, 'github-copilot');
+      await api.gitProvider.pushFiles(
+        prProvider,
         owner, repo, prBase, prHead,
         [{ path: '.github/copilot-instructions.md', content }],
         `chore: add ${currentAgent.metadata.name} agent config`,
       );
-      const result = await window.api.github.createPR({ owner, repo, head: prHead, base: prBase, title: prTitle, body: prBody });
+      const result = await api.gitProvider.createPR(prProvider, { owner, repo, head: prHead, base: prBase, title: prTitle, body: prBody });
       setPrResult(result);
     } catch (e: any) {
       setPrError(e?.message || String(e));
@@ -230,11 +301,57 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
     updateField(['mcpConfig', 'tools'], tools);
   };
 
+  const handleMoveAgent = async (agentToMoveId: string, targetProjectId: string | null) => {
+    try {
+      const agent = agents.find(a => a.id === agentToMoveId);
+      if (!agent) return;
+      await api.agent.update(agentToMoveId, { ...agent, projectId: targetProjectId ?? undefined });
+      setContextMenuAgentId(null);
+      loadAgents();
+    } catch (error) {
+      console.error('Failed to move agent:', error);
+    }
+  };
+
+  const handleCopyAgent = async (agentToCopy: Agent, targetProjectId: string | null) => {
+    try {
+      await api.agent.create({
+        ...agentToCopy,
+        projectId: targetProjectId ?? undefined,
+        metadata: { ...agentToCopy.metadata, name: `${agentToCopy.metadata.name} (copy)` },
+      });
+      setContextMenuAgentId(null);
+      loadAgents();
+    } catch (error) {
+      console.error('Failed to copy agent:', error);
+    }
+  };
+
+  const handleGenerated = async (result: any) => {
+    try {
+      const newAgent = await api.agent.create({
+        projectId: projectId ?? undefined,
+        ...result,
+      });
+      setAgents(prev => [...prev, newAgent]);
+      onAgentChange(newAgent.id);
+      setIsEditing(true);
+      setShowGenerateModal(false);
+    } catch (error) {
+      console.error('Failed to save generated agent:', error);
+    }
+  };
+
   return (
     <div className="agent-editor">
       <div className="agent-header">
         <h2>Agent Editor</h2>
         <div className="header-actions">
+          {IS_WEB && (
+            <button className="btn" onClick={() => setShowGenerateModal(true)}>
+              ✨ Generate
+            </button>
+          )}
           <button className="btn btn-primary" onClick={createNewAgent}>
             + New Agent
           </button>
@@ -250,8 +367,36 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
               className={`agent-item ${agentId === agent.id ? 'active' : ''}`}
               onClick={() => onAgentChange(agent.id)}
             >
-              <div className="agent-name">{agent.metadata.name}</div>
+              <div className="agent-item-row">
+                <div className="agent-name">{agent.metadata.name}</div>
+                <button
+                  className="agent-context-btn"
+                  title="Move / Copy"
+                  onClick={e => { e.stopPropagation(); setContextMenuAgentId(contextMenuAgentId === agent.id ? null : agent.id); }}
+                >
+                  ⋮
+                </button>
+              </div>
               <div className="agent-version">{agent.metadata.version}</div>
+              {contextMenuAgentId === agent.id && (
+                <div className="agent-context-menu" onClick={e => e.stopPropagation()}>
+                  <div className="context-menu-section">Move to project</div>
+                  <button className="context-menu-item" onClick={() => handleMoveAgent(agent.id, null)}>🌐 No project</button>
+                  {allProjects.filter(p => p.id !== agent.projectId).map(p => (
+                    <button key={p.id} className="context-menu-item" onClick={() => handleMoveAgent(agent.id, p.id)}>
+                      📁 {p.name}
+                    </button>
+                  ))}
+                  <div className="context-menu-divider" />
+                  <div className="context-menu-section">Copy to project</div>
+                  <button className="context-menu-item" onClick={() => handleCopyAgent(agent, null)}>🌐 No project</button>
+                  {allProjects.map(p => (
+                    <button key={p.id} className="context-menu-item" onClick={() => handleCopyAgent(agent, p.id)}>
+                      📁 {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -284,7 +429,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
                       <button className="btn btn-danger" onClick={deleteAgent}>
                         Delete
                       </button>
-                      <button className="btn btn-github" onClick={openPRModal} title="Create GitHub Pull Request">
+                      <button className="btn btn-github" onClick={openPRModal} title="Create Pull Request">
                         Create PR
                       </button>
                     </>
@@ -405,14 +550,15 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
               </div>
 
               <div className="form-section">
-                <h4>Instructions</h4>
-                <div className="form-group">
-                  <textarea
+                <h4>Instructions {IS_WEB && isEditing && <span className="save-status">{saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : ''}</span>}</h4>
+                <div className="form-group monaco-field">
+                  <Editor
+                    height="260px"
+                    language="markdown"
+                    theme="vs-dark"
                     value={currentAgent.instructions || ''}
-                    onChange={(e) => updateField(['instructions'], e.target.value)}
-                    disabled={!isEditing}
-                    rows={10}
-                    placeholder="Enter custom instructions for the agent..."
+                    options={{ readOnly: !isEditing, minimap: { enabled: false }, wordWrap: 'on', scrollBeyondLastLine: false }}
+                    onChange={value => { if (isEditing) updateField(['instructions'], value ?? ''); }}
                   />
                 </div>
               </div>
@@ -429,7 +575,7 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
         <div className="modal-overlay" onClick={() => !prCreating && setShowPRModal(false)}>
           <div className="modal-content pr-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Create GitHub Pull Request</h3>
+              <h3>Create Pull Request</h3>
               <button className="modal-close" onClick={() => setShowPRModal(false)} disabled={prCreating}>✕</button>
             </div>
 
@@ -437,17 +583,38 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
               <div className="pr-success">
                 <p>✅ Pull Request <strong>#{prResult.number}</strong> created successfully!</p>
                 <a href={prResult.url} target="_blank" rel="noreferrer" className="btn btn-primary">
-                  View PR on GitHub
+                  View PR on {PROVIDER_LABELS[prProvider]}
                 </a>
                 <button className="btn" onClick={() => setShowPRModal(false)} style={{ marginLeft: '8px' }}>Close</button>
               </div>
             ) : (
               <div className="pr-form">
                 <div className="form-group">
+                  <label>Provider <span className="required">*</span></label>
+                  <select
+                    value={prProvider}
+                    onChange={e => setPrProvider(e.target.value as ProviderType)}
+                    disabled={prCreating}
+                    className="provider-select"
+                  >
+                    {(['github', 'gitlab', 'bitbucket'] as ProviderType[]).map(p => {
+                      const connected = connectedProviders.find(cp => cp.type === p);
+                      return (
+                        <option key={p} value={p} disabled={!connected}>
+                          {PROVIDER_LABELS[p]}{connected ? ` (${connected.user.login})` : ' (not connected)'}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {connectedProviders.length === 0 && (
+                    <p className="hint-text">No providers connected. Go to Settings to connect.</p>
+                  )}
+                </div>
+                <div className="form-group">
                   <label>Repository <span className="required">*</span></label>
                   <input
                     type="text"
-                    placeholder="owner/repo"
+                    placeholder={prProvider === 'bitbucket' ? 'workspace/repo' : 'owner/repo'}
                     value={prOwnerRepo}
                     onChange={e => setPrOwnerRepo(e.target.value)}
                     disabled={prCreating}
@@ -504,6 +671,15 @@ function AgentEditor({ agentId, onAgentChange }: AgentEditorProps) {
             )}
           </div>
         </div>
+      )}
+
+      {showGenerateModal && (
+        <GenerateModal
+          type="agent"
+          onClose={() => setShowGenerateModal(false)}
+          onGenerated={handleGenerated}
+          generateFn={api.generate.agent}
+        />
       )}
     </div>
   );

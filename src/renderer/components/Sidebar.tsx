@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import { ViewType } from '../App';
+import { ProjectSelector } from './ProjectSelector';
 import '../styles/Sidebar.css';
+import { api } from '../api';
 
 interface SidebarProps {
   currentView: ViewType;
   onViewChange: (view: ViewType) => void;
+  currentProjectId: string | null;
+  onProjectChange: (projectId: string | null) => void;
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -16,11 +20,11 @@ const PROVIDER_ICONS: Record<string, string> = {
   github: '🐙', gitlab: '🦊', bitbucket: '🪣',
 };
 
-function Sidebar({ currentView, onViewChange }: SidebarProps) {
+function Sidebar({ currentView, onViewChange, currentProjectId, onProjectChange }: SidebarProps) {
   const [connectedAccounts, setConnectedAccounts] = useState<{ type: string; user: { login: string; avatar_url: string } }[]>([]);
 
   useEffect(() => {
-    window.api.gitProvider.getConnectedAccounts()
+    api.gitProvider.getConnectedAccounts()
       .then(setConnectedAccounts)
       .catch(() => setConnectedAccounts([]));
   }, []);
@@ -28,7 +32,7 @@ function Sidebar({ currentView, onViewChange }: SidebarProps) {
   // Refresh accounts when settings view is left (user may have just connected)
   const handleViewChange = (view: ViewType) => {
     if (currentView === 'settings' && view !== 'settings') {
-      window.api.gitProvider.getConnectedAccounts()
+      api.gitProvider.getConnectedAccounts()
         .then(setConnectedAccounts)
         .catch(() => {});
     }
@@ -36,13 +40,9 @@ function Sidebar({ currentView, onViewChange }: SidebarProps) {
   };
 
   const menuItems: { view: ViewType; label: string; icon: string }[] = [
-    { view: 'agents',    label: 'Agents',          icon: '🤖' },
-    { view: 'skills',    label: 'Skills',           icon: '⚡' },
-    { view: 'mcp',       label: 'MCP Config',       icon: '🔧' },
-    { view: 'sync',      label: 'Sync',             icon: '🔄' },
-    { view: 'workspace', label: 'Workspace Setup',  icon: '🗂️'  },
-    { view: 'discover',  label: 'Discover',         icon: '🛒' },
-    { view: 'git',       label: 'Git Integration',  icon: '🌿' },
+    { view: 'agents',  label: 'Agents',     icon: '🤖' },
+    { view: 'skills',  label: 'Skills',     icon: '⚡' },
+    { view: 'mcp',     label: 'MCP Config', icon: '🔧' },
   ];
 
   return (
@@ -51,6 +51,15 @@ function Sidebar({ currentView, onViewChange }: SidebarProps) {
         <h1>Agent Orchestrator</h1>
         <p className="subtitle">DevTools Architect</p>
       </div>
+
+      {/* Project selector */}
+      <div className="sidebar-project">
+        <ProjectSelector
+          currentProjectId={currentProjectId}
+          onProjectChange={onProjectChange}
+        />
+      </div>
+
       <nav className="sidebar-nav">
         {menuItems.map((item) => (
           <button

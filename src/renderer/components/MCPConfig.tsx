@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import '../styles/MCPConfig.css';
 import type { MCPProjectConfig, MCPServerConfig } from '../types/electron';
+import { api } from '../api';
 
 type Platform = 'github-copilot' | 'claude' | 'cursor' | 'antigravity' | 'opencode';
 
@@ -34,7 +35,7 @@ function MCPConfig() {
 
   const loadProjects = useCallback(async () => {
     try {
-      const list = await window.api.mcp.getAllProjects();
+      const list = await api.mcp.getAllProjects();
       setProjects(list);
     } catch (err) {
       console.error('Failed to load MCP projects', err);
@@ -59,7 +60,7 @@ function MCPConfig() {
 
   const newProject = async () => {
     try {
-      const created = await window.api.mcp.createProject({
+      const created = await api.mcp.createProject({
         label: 'New Project',
         projectPath: '',
         platform: 'github-copilot',
@@ -75,7 +76,7 @@ function MCPConfig() {
   const saveProject = async () => {
     if (!editing) return;
     try {
-      await window.api.mcp.updateProject(editing.id, editing);
+      await api.mcp.updateProject(editing.id, editing);
       await loadProjects();
       showStatus('Saved');
     } catch {
@@ -87,7 +88,7 @@ function MCPConfig() {
     if (!editing) return;
     if (!confirm(`Delete project "${editing.label}"?`)) return;
     try {
-      await window.api.mcp.deleteProject(editing.id);
+      await api.mcp.deleteProject(editing.id);
       setSelectedId(null);
       await loadProjects();
       showStatus('Deleted');
@@ -103,7 +104,7 @@ function MCPConfig() {
       return;
     }
     try {
-      const dest = await window.api.mcp.deployProject(editing);
+      const dest = await api.mcp.deployProject(editing);
       showStatus(`Deployed → ${dest}`);
     } catch {
       showStatus('Deploy failed', 'err');

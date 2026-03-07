@@ -76,6 +76,14 @@ import {
   GetSnippetUseCase,
   PublishSnippetUseCase,
 } from '../application/use-cases/GitProviderUseCases';
+import {
+  GetAllProjectsUseCase,
+  GetProjectByIdUseCase,
+  CreateProjectUseCase,
+  UpdateProjectUseCase,
+  DeleteProjectUseCase,
+} from '../application/use-cases/ProjectUseCases';
+import { FileSystemProjectRepository } from '../infrastructure/repositories/FileSystemProjectRepository';
 import { PLATFORM_OUTPUT_PATHS } from '../domain/entities/Platform';
 import type { Platform } from '../domain/entities/Platform';
 
@@ -86,6 +94,7 @@ const dataDir = path.join(app.getPath('userData'), 'data');
 const agentRepository = new FileSystemAgentRepository(dataDir);
 const skillRepository = new FileSystemSkillRepository(dataDir);
 const mcpRepository = new FileSystemMCPRepository(dataDir);
+const projectRepository = new FileSystemProjectRepository(dataDir);
 const secureStorage = new KeytarSecureStorage();
 const syncService = new CopilotSyncService();
 const mcpToolsService = new MCPToolsService();
@@ -158,6 +167,13 @@ const createPRUseCase = new CreatePRUseCase(gitProviderService);
 const listMarketplaceSnippetsUseCase = new ListMarketplaceSnippetsUseCase(gitProviderService);
 const getSnippetUseCase = new GetSnippetUseCase(gitProviderService);
 const publishSnippetUseCase = new PublishSnippetUseCase(gitProviderService);
+
+// Project use cases
+const getAllProjectsUseCase = new GetAllProjectsUseCase(projectRepository);
+const getProjectByIdUseCase = new GetProjectByIdUseCase(projectRepository);
+const createProjectUseCase = new CreateProjectUseCase(projectRepository);
+const updateProjectUseCase = new UpdateProjectUseCase(projectRepository);
+const deleteProjectUseCase = new DeleteProjectUseCase(projectRepository);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -299,6 +315,27 @@ ipcMain.handle('mcp:deleteProject', async (_event, id) => {
 
 ipcMain.handle('mcp:deployProject', async (_event, config) => {
   return await deployMCPProjectUseCase.execute(config);
+});
+
+// IPC Handlers for Projects
+ipcMain.handle('project:getAll', async () => {
+  return await getAllProjectsUseCase.execute();
+});
+
+ipcMain.handle('project:getById', async (_event, id) => {
+  return await getProjectByIdUseCase.execute(id);
+});
+
+ipcMain.handle('project:create', async (_event, data) => {
+  return await createProjectUseCase.execute(data);
+});
+
+ipcMain.handle('project:update', async (_event, id, updates) => {
+  return await updateProjectUseCase.execute(id, updates);
+});
+
+ipcMain.handle('project:delete', async (_event, id) => {
+  return await deleteProjectUseCase.execute(id);
 });
 
 // IPC Handlers for Secure Storage

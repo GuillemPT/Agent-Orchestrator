@@ -31,6 +31,15 @@ export class FileSystemAgentRepository implements IAgentRepository {
     }
   }
 
+  async findByProjectId(projectId: string | null): Promise<Agent[]> {
+    const all = await this.findAll();
+    if (projectId === null) {
+      // Return global agents (no projectId set)
+      return all.filter(a => !a.projectId);
+    }
+    return all.filter(a => a.projectId === projectId);
+  }
+
   async findById(id: string): Promise<Agent | null> {
     try {
       const filePath = path.join(this.storageDir, `${id}.json`);

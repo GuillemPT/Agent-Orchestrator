@@ -3,6 +3,7 @@ import { Platform } from '../entities/Platform';
 
 export interface ISkillRepository {
   findAll(): Promise<Skill[]>;
+  findByProjectId(projectId: string | null): Promise<Skill[]>;  // null = global skills
   findById(id: string): Promise<Skill | null>;
   save(skill: Skill): Promise<void>;
   delete(id: string): Promise<void>;

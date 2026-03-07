@@ -1,19 +1,32 @@
 import { useState, useEffect } from 'react';
 import type { ProviderType, GitUser, DeviceFlowInit, ProviderSettings } from '../types/electron';
+import { api } from '../api';
 import '../styles/Settings.css';
+
+const IS_WEB = import.meta.env.VITE_MODE === 'web';
+
+type AIProvider = 'groq' | 'openai' | 'ollama' | 'disabled';
+
+const AI_PROVIDER_META: Record<Exclude<AIProvider, 'disabled'>, { label: string; defaultModel: string }> = {
+  groq: { label: 'Groq (Free)', defaultModel: 'llama-3.3-70b-versatile' },
+  openai: { label: 'OpenAI', defaultModel: 'gpt-4o-mini' },
+  ollama: { label: 'Ollama (Local)', defaultModel: 'qwen2.5:7b' },
+};
 
 const PROVIDER_META: Record<ProviderType, {
   label: string; color: string; icon: string;
   supportsDeviceFlow: boolean;
   docsUrl: string; oauthAppUrl: string;
   scopeHint: string;
+  setupNote?: string;
 }> = {
   github: {
     label: 'GitHub', color: '#24292f', icon: '🐙',
     supportsDeviceFlow: true,
     docsUrl: 'https://docs.github.com/en/developers/apps/building-oauth-apps/authorizing-oauth-apps#device-flow',
-    oauthAppUrl: 'https://github.com/settings/apps/new',
+    oauthAppUrl: 'https://github.com/settings/developers',
     scopeHint: 'Required scopes: repo, gist, read:user',
+    setupNote: '⚠️ Create an "OAuth App" (NOT a GitHub App). Enable "Device Flow" checkbox.',
   },
   gitlab: {
     label: 'GitLab', color: '#fc6d26', icon: '🦊',
@@ -132,12 +145,13 @@ function ProviderCard({ type, initialUser, initialClientId, onConnect, onDisconn
                 Create an <a href={meta.oauthAppUrl} target="_blank" rel="noreferrer">OAuth App</a> and paste the Client ID below.
                 {' '}<a href={meta.docsUrl} target="_blank" rel="noreferrer">Docs ↗</a>
               </p>
+              {meta.setupNote && <p className="config-setup-note">{meta.setupNote}</p>}
               <p className="config-scope-hint">{meta.scopeHint}</p>
               <div className="config-row">
                 <input
                   type="text"
                   className="config-input"
-                  placeholder="OAuth App Client ID"
+                  placeholder="OAuth App Client ID (hex string, NOT starting with Iv)"
                   value={clientId}
                   onChange={e => { setClientId(e.target.value); setClientIdSaved(false); }}
                   onBlur={saveClientId}
@@ -221,10 +235,23 @@ function ProviderCard({ type, initialUser, initialClientId, onConnect, onDisconn
 
 // ── Main Settings component ──────────────────────────────────────────────────
 
+type Theme = 'dark' | 'light';
+
 export default function Settings() {
   const [accounts, setAccounts] = useState<{ type: ProviderType; user: GitUser }[]>([]);
   const [settings, setSettings] = useState<ProviderSettings>({});
   const [loading, setLoading] = useState(true);
+  const [testingConnections, setTestingConnections] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<string | null>(null);
+  const [aiProvider, setAiProvider] = useState<AIProvider>('groq');
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [aiModel, setAiModel] = useState('llama-3.3-70b-versatile');
+  const [aiTestResult, setAiTestResult] = useState<string | null>(null);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  });
 
   useEffect(() => {
     Promise.all([
@@ -237,11 +264,54 @@ export default function Settings() {
     }).catch(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
   const handleConnect = (type: ProviderType, user: GitUser) => {
     setAccounts(prev => [...prev.filter(a => a.type !== type), { type, user }]);
   };
   const handleDisconnect = (type: ProviderType) => {
     setAccounts(prev => prev.filter(a => a.type !== type));
+  };
+
+  const testConnections = async () => {
+    setTestingConnections(true);
+    setConnectionTestResult(null);
+    try {
+      const accts = await window.api.gitProvider.getConnectedAccounts();
+      setAccounts(accts);
+      if (accts.length === 0) {
+        setConnectionTestResult('No providers connected.');
+      } else {
+        const names = accts.map(a => `${PROVIDER_META[a.type].label} (${a.user.login})`).join(', ');
+        setConnectionTestResult(`✓ Connected: ${names}`);
+      }
+    } catch (e: any) {
+      setConnectionTestResult(`✗ Error: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setTestingConnections(false);
+      setTimeout(() => setConnectionTestResult(null), 5000);
+    }
+  };
+
+  const testAIConnection = async () => {
+    setAiTesting(true);
+    setAiTestResult(null);
+    try {
+      const result = await api.generate.agent('A simple test agent that greets users');
+      if (result?.metadata?.name) {
+        setAiTestResult(`✓ Connected — generated "${result.metadata.name}"`);
+      } else {
+        setAiTestResult('✗ Unexpected response format');
+      }
+    } catch (e: any) {
+      setAiTestResult(`✗ ${e?.message || 'Connection failed'}`);
+    } finally {
+      setAiTesting(false);
+      setTimeout(() => setAiTestResult(null), 8000);
+    }
   };
 
   if (loading) return <div className="settings-loading">Loading…</div>;
@@ -254,6 +324,27 @@ export default function Settings() {
         <h2>Settings</h2>
       </div>
       <div className="settings-body">
+        <section className="settings-section">
+          <h3>Appearance</h3>
+          <div className="theme-toggle">
+            <label>Theme</label>
+            <div className="theme-options">
+              <button 
+                className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => setTheme('dark')}
+              >
+                🌙 Dark
+              </button>
+              <button 
+                className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => setTheme('light')}
+              >
+                ☀️ Light
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section className="settings-section">
           <h3>Git Providers</h3>
           <p className="section-desc">
@@ -272,7 +363,107 @@ export default function Settings() {
               />
             ))}
           </div>
+          <div className="test-connections-row">
+            <button 
+              className="btn" 
+              onClick={testConnections} 
+              disabled={testingConnections}
+            >
+              {testingConnections ? 'Testing…' : '🔌 Test Connections'}
+            </button>
+            {connectionTestResult && (
+              <span className={`test-result ${connectionTestResult.startsWith('✓') ? 'success' : connectionTestResult.startsWith('✗') ? 'error' : ''}`}>
+                {connectionTestResult}
+              </span>
+            )}
+          </div>
         </section>
+
+        {IS_WEB ? (
+          <section className="settings-section">
+            <h3>AI Provider</h3>
+            <p className="section-desc">
+              Configure the AI backend for agent and skill generation. Groq's free tier is recommended for most users.
+            </p>
+            <div className="ai-settings-grid">
+              <div className="ai-field">
+                <label>Provider</label>
+                <select
+                  value={aiProvider}
+                  onChange={(e) => {
+                    const p = e.target.value as AIProvider;
+                    setAiProvider(p);
+                    if (p !== 'disabled') {
+                      setAiModel(AI_PROVIDER_META[p].defaultModel);
+                    }
+                  }}
+                  className="ai-select"
+                >
+                  <option value="groq">Groq (Free)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="ollama">Ollama (Local)</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </div>
+
+              {aiProvider !== 'disabled' && aiProvider !== 'ollama' && (
+                <div className="ai-field">
+                  <label>API Key</label>
+                  <input
+                    type="password"
+                    value={aiApiKey}
+                    onChange={(e) => setAiApiKey(e.target.value)}
+                    placeholder={`Enter ${aiProvider === 'groq' ? 'Groq' : 'OpenAI'} API key`}
+                    className="ai-input"
+                  />
+                </div>
+              )}
+
+              {aiProvider !== 'disabled' && (
+                <div className="ai-field">
+                  <label>Model</label>
+                  <input
+                    type="text"
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    placeholder="Model name"
+                    className="ai-input"
+                  />
+                </div>
+              )}
+            </div>
+
+            {aiProvider !== 'disabled' && (
+              <div className="test-connections-row" style={{ marginTop: 12 }}>
+                <button
+                  className="btn"
+                  onClick={testAIConnection}
+                  disabled={aiTesting}
+                >
+                  {aiTesting ? 'Testing…' : '🧪 Test Connection'}
+                </button>
+                {aiTestResult && (
+                  <span className={`test-result ${aiTestResult.startsWith('✓') ? 'success' : 'error'}`}>
+                    {aiTestResult}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {aiProvider === 'ollama' && (
+              <p className="section-desc" style={{ marginTop: 8 }}>
+                Run Ollama locally: <code>docker compose up -d</code> then <code>docker exec … ollama pull qwen2.5:7b</code>
+              </p>
+            )}
+          </section>
+        ) : (
+          <section className="settings-section">
+            <h3>AI Provider</h3>
+            <p className="section-desc">
+              AI generation is only available in web mode. Run with <code>npm run dev:web</code> to enable it.
+            </p>
+          </section>
+        )}
 
         <section className="settings-section">
           <h3>About</h3>
@@ -281,7 +472,7 @@ export default function Settings() {
             <div className="about-row"><span>Architecture</span><span>Electron 28 · React 18 · TypeScript 5.3</span></div>
             <div className="about-row">
               <span>Repository</span>
-              <a href="https://github.com/guillem/Agent-Orchestrator" target="_blank" rel="noreferrer">
+              <a href="https://github.com/GuillemPT/Agent-Orchestrator" target="_blank" rel="noreferrer">
                 GitHub ↗
               </a>
             </div>

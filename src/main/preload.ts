@@ -85,6 +85,15 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('github:pushFiles', owner, repo, baseBranch, newBranch, files, commitMessage),
   },
 
+  // Project operations
+  project: {
+    getAll: () => ipcRenderer.invoke('project:getAll'),
+    getById: (id: string) => ipcRenderer.invoke('project:getById', id),
+    create: (data: any) => ipcRenderer.invoke('project:create', data),
+    update: (id: string, updates: any) => ipcRenderer.invoke('project:update', id, updates),
+    delete: (id: string) => ipcRenderer.invoke('project:delete', id),
+  },
+
   // Multi-provider Git operations
   gitProvider: {
     getConnectedAccounts: () => ipcRenderer.invoke('gitProvider:getConnectedAccounts'),

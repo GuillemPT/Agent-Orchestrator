@@ -18,6 +18,7 @@ export interface SkillYAML {
 
 export interface Skill {
   id: string;
+  projectId?: string;          // Optional: links skill to a project
   metadata: SkillMetadata;
   markdown?: string;
   yaml?: SkillYAML;
@@ -34,14 +35,15 @@ export class SkillEntity implements Skill {
     public yaml?: SkillYAML,
     public scripts: SkillScript[] = [],
     public createdAt: Date = new Date(),
-    public updatedAt: Date = new Date()
+    public updatedAt: Date = new Date(),
+    public projectId?: string
   ) {}
 
   static create(data: Partial<Skill>): SkillEntity {
     const id = data.id || crypto.randomUUID();
     const now = new Date();
 
-    return new SkillEntity(
+    const entity = new SkillEntity(
       id,
       data.metadata || {
         name: 'New Skill',
@@ -52,8 +54,10 @@ export class SkillEntity implements Skill {
       data.yaml,
       data.scripts || [],
       data.createdAt || now,
-      data.updatedAt || now
+      data.updatedAt || now,
+      data.projectId
     );
+    return entity;
   }
 
   addScript(script: SkillScript): void {

@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+const isWebMode = process.env.VITE_MODE === 'web';
+
 export default defineConfig({
   plugins: [react()],
   root: 'src/renderer',
@@ -22,5 +24,13 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false,
+    ...(isWebMode && {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+        },
+      },
+    }),
   },
 });

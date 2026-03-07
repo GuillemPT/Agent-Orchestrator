@@ -30,6 +30,26 @@ body,
   --scrollbar-thumb-hover: #4e4e4e;
 }
 
+/* Light theme */
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f3f3;
+  --bg-tertiary: #e8e8e8;
+  --bg-hover: #e0e0e0;
+  --border-color: #d4d4d4;
+  --text-primary: #1e1e1e;
+  --text-secondary: #6e6e6e;
+  --text-muted: #9e9e9e;
+  --accent-blue: #0066b8;
+  --accent-blue-hover: #0078d4;
+  --accent-green: #107c10;
+  --accent-red: #d13438;
+  --accent-orange: #ca5010;
+  --scrollbar-bg: #f3f3f3;
+  --scrollbar-thumb: #c4c4c4;
+  --scrollbar-thumb-hover: #a6a6a6;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',

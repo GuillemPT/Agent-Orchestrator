@@ -23,6 +23,10 @@
   color: var(--text-secondary);
 }
 
+.sidebar-project {
+  padding: 12px 12px 0;
+}
+
 .sidebar-nav {
   flex: 1;
   padding: 8px 0;

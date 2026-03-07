@@ -73,6 +73,19 @@ export interface GistItem {
   owner: { login: string }; created_at: string;
 }
 
+// ── Project types ────────────────────────────────────────────────────────
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  repoUrl?: string;
+  localPath?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface CreateProjectInput { name: string; description?: string; repoUrl?: string; localPath?: string; }
+export interface UpdateProjectInput { name?: string; description?: string; repoUrl?: string; localPath?: string; }
+
 // ── Multi-provider types ─────────────────────────────────────────────────
 export type ProviderType = 'github' | 'gitlab' | 'bitbucket';
 export interface GitUser { login: string; name?: string; avatar_url: string; email?: string; provider: ProviderType; }
@@ -101,6 +114,13 @@ export interface IElectronAPI {
     exportToYaml: (skill: any) => Promise<string>;
     createDirectory: (skill: any, basePath: string) => Promise<void>;
     validateDescription: (description: string) => Promise<ValidationResult>;
+  };
+  project: {
+    getAll: () => Promise<Project[]>;
+    getById: (id: string) => Promise<Project | null>;
+    create: (data: CreateProjectInput) => Promise<Project>;
+    update: (id: string, updates: UpdateProjectInput) => Promise<Project>;
+    delete: (id: string) => Promise<void>;
   };
   mcp: {
     load: () => Promise<any>;

@@ -1,0 +1,18 @@
+# Docker Compose for local Ollama development
+# Usage:
+#   docker compose up -d
+#   docker exec agent-orchestrator-ollama-1 ollama pull qwen2.5:7b
+#
+# Then set env:
+#   AI_PROVIDER=ollama AI_BASE_URL=http://localhost:11434/v1 AI_API_KEY=none
+
+services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:

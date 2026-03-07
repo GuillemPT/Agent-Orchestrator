@@ -1,24 +1,22 @@
 # Agent Orchestrator — Session Notes
 
-> Last updated: 2026-02-18  
+> Last updated: 2026-02-20  
 > Stack: Electron 28 · React 18 · TypeScript 5.3 · Vite 5 · esbuild · Vitest  
-> Tests: **66 passing** · Builds: **main ✅ · renderer ✅**
+> Tests: **86 passing** · Builds: **main ✅ · renderer ✅**
 
 ---
 
 ## What exists right now
 
-### Views / panels
+### Views / panels (active in Sidebar)
 | View key | Component | Description |
 |---|---|---|
-| `agents` | `AgentEditor.tsx` | Create/edit/export agents to 5 platforms + PR modal |
-| `skills` | `SkillWizard.tsx` | Skill builder wizard + PR modal |
+| `agents` | `AgentEditor.tsx` | Create/edit/export agents · Monaco editor · move/copy between projects · PR modal |
+| `skills` | `SkillWizard.tsx` | Skill builder wizard · Monaco editor · move/copy between projects · PR modal |
 | `mcp` | `MCPConfig.tsx` | MCP server configuration |
-| `sync` | `SyncPanel.tsx` | Directory → workspace sync |
-| `workspace` | `WorkspaceSetup.tsx` | Pattern analysis & workspace scaffolding |
-| `discover` | `Discover.tsx` | GitHub Gist marketplace for agents/skills |
-| `git` | `GitPanel.tsx` | Git operations panel |
-| `settings` | `Settings.tsx` | **NEW** Multi-provider OAuth settings |
+| `settings` | `Settings.tsx` | Multi-provider OAuth settings |
+
+> `SyncPanel`, `WorkspaceSetup`, `Discover`, `GitPanel` — components preserved but **removed from Sidebar menu** until core is stable.
 
 ### Domain / infrastructure added this session
 ```
@@ -88,74 +86,62 @@ Added `NODE_ENV=development` so Electron correctly connects to the Vite dev serv
 | Auth — Bitbucket | App Passwords (Basic auth) | Bitbucket doesn't support Device Flow |
 | OAuth app ownership | Each user registers their own OAuth app | No server-side secret storage; app works for everyone out of the box |
 | Backward compat | Old `GitHubService` + `github:*` IPC kept intact | `AgentEditor` + `SkillWizard` PR modals and `Discover` still use old path |
+| API abstraction | `src/renderer/api/index.ts` selects `window.api.*` vs `fetch('/api/*')` via `VITE_MODE` | Single import; zero diff between Electron and web component code |
+| Mode flag | `VITE_MODE=web` env var (Vite build-time) | Avoids runtime `navigator.userAgent` hacks; tree-shaken in production |
+| Project-less agents | `projectId: null` → "Sin proyecto" bucket | Allows creating without an active project; surfaced in selector as virtual group |
+| Sidebar scope | Remove discover/sync/workspace/git from menuItems; keep components | Fast cleanup without deleting work; easy to re-enable later |
+| Monaco in renderer | `@monaco-editor/react` lazy-loaded | VS Code engine, markdown/YAML highlighting, `vs-dark` matches app theme |
+| Auto-save (web only) | 1 s `setTimeout` debounce, `PUT /api/agents/:id` | Notion-like UX; Electron side skips (file-system save is immediate) |
+| Web auth | Better Auth (Hono plugin) — GitHub + Google OAuth | Official SDK for Hono; supports multiple providers with minimal config |
 
 ---
 
 ## Pending / next steps
 
-### 🔴 Known broken — Create / Save buttons (agents, skills, MCPs, sync)
+### � Phase 13 — Version history (optional)
+Add `AgentVersion` table (already in `schema.prisma`) to keep full edit history per agent/skill. Expose a "History" sidebar in `AgentEditor` / `SkillWizard` where the user can browse and restore previous versions.
+### 🟡 Future idea — Copy/paste agents & skills
+Allow copying an agent or skill to the clipboard (serialised JSON/YAML) and pasting it as a new item — useful for templating and quick duplication across projects without using the ⋮ context menu.
 
-All "New Agent", "Save", "Create Skill", etc. buttons call `window.api.*` IPC handlers that write to the **local filesystem** (`FileSystemAgentRepository`, `FileSystemSkillRepository`, etc.). They are broken or unreliable in the current build — likely due to the path resolution changing between dev and built mode, or IPC not being wired after the Phase 8 refactor of `main.ts`.
-
-**How to debug:**
-- Run `npm run dev` (opens DevTools automatically now)
-- Click "New Agent" and check the Console for IPC errors
-- Check the Network/IPC tab or add `console.log` to the `agents:create` handler in `main.ts`
-
-**Fix in Electron (short term):** Audit the `agents:*`, `skills:*`, `mcp:*` IPC handlers in `main.ts` and confirm `dataDir` resolves correctly and the repository instances are passed properly.
-
-**Fix in the web version (Phase 12, long term):** These buttons will call `fetch('/api/agents')`, `fetch('/api/skills')`, etc. instead of `window.api.*`. The underlying logic (use cases + domain entities) stays exactly the same — only the transport changes. No file system access needed: data goes to the database (Prisma → PostgreSQL/SQLite). Concretely:
-
-| Current (Electron IPC) | Web version (HTTP) |
-|---|---|
-| `window.api.agents.create(data)` | `POST /api/agents` with JSON body |
-| `window.api.agents.list()` | `GET /api/agents?projectId=xxx` |
-| `window.api.agents.update(id, data)` | `PUT /api/agents/:id` |
-| `window.api.agents.delete(id)` | `DELETE /api/agents/:id` |
-| Same pattern for skills, mcps, sync | Same pattern |
-
-The React components themselves barely change — just swap the call site. All state management, form logic and UI stays the same.
-
-### 🟡 Phase 8 — wiring Settings UI properly
-`Settings.tsx` is rendered but the Device Flow UX needs real-world testing:
-1. Register a GitHub OAuth app (Settings → Developer settings → OAuth Apps)
-   - Homepage URL: `http://localhost`
-   - Callback URL: `http://localhost` (Device Flow doesn't use it)
-   - Note the **Client ID** (secret is NOT needed for Device Flow)
-2. Open Settings in the app, enter the Client ID, click Connect
-3. Follow the verification URL + code shown in the UI
-4. Confirm avatar appears in the Sidebar footer
-
-Same flow for GitLab. For Bitbucket, use username + App Password (Settings → Personal settings → App passwords, grant Read repositories scope).
-
-### 🟡 Phase 8 — integrate new providers into existing flows
-Currently `AgentEditor` and `SkillWizard` PR modals call `window.api.github.*` (old path, PAT-based). Once the new providers are confirmed working, migrate them to:
-```ts
-window.api.gitProvider.createPR({ provider: 'github', ... })
-window.api.gitProvider.pushFiles({ provider: 'github', ... })
+### 🟡 Future idea — Multi-tenant Kubernetes + local AI (Ollama)
+When the web version is hosted, each tenant (user/org) could have its own isolated pod in a Kubernetes cluster. One of the pods could run an Ollama instance so that agents/skills are generated and validated locally (no cloud LLM calls needed). The Hono server would act as an API gateway routing requests to the correct pod. Auto-scaling via HPA based on active sessions.
+Architecture sketch:
 ```
-And show a provider selector in the PR modal (GitHub / GitLab / Bitbucket dropdown).
-
-### 🟡 Phase 8 — migrate Discover
-`Discover.tsx` uses `window.api.github.listGists` / `getGist` / `publishGist` (old PAT path). Migrate to `window.api.gitProvider.listMarketplaceSnippets` etc., with a provider filter so GitLab/Bitbucket snippet markets also appear.
-
-### 🟢 Phase 9 — tests for new use cases
-`GitProviderUseCases.ts` has no tests yet. Add `src/application/use-cases/__tests__/GitProviderUseCases.test.ts` following the same pattern as `GitHubUseCases.test.ts`.
-
-### 🟢 Phase 10 — packaging / distribution
-- `electron-builder` config not yet created → add `build` section to `package.json`
-- Per-platform targets: `.AppImage` (Linux), `.dmg` (macOS), `.exe` NSIS installer (Windows)
-- Code-signing config (macOS notarisation, Windows Authenticode)
-- Auto-updater via `electron-updater`
-
-### 🟢 Phase 11 — UI polish
-- The Sidebar provider strip (`providers-strip`) shows avatar + login for connected accounts. Add a tooltip with provider name on hover.
-- Settings page: add a "Test connection" button that calls `getConnectedAccounts` and shows a success badge.
-- Dark/light theme toggle (CSS variables are already set up for it).
+Ingress
+  └─ Hono API gateway (1 replica, scales horizontally)
+       ├─ User pod A  → Ollama sidecar, SQLite volume
+       ├─ User pod B  → Ollama sidecar, SQLite volume
+       └─ …
+```
+### 🟡 Phase 12 — Deploy
+Scaffold and web migration complete; still pending:
+- `npx prisma migrate dev --name init` first run
+- Deploy Hono server to Railway / Render
+- Deploy React SPA to Vercel / Cloudflare Pages
+- Switch SQLite datasource to PostgreSQL for production
 
 ---
 
-## Phase 12 — Web app + multi-user SaaS
+### ✅ COMPLETADOS (sesión 2026-02-20)
+
+- **ProjectSelector modal** → import extraído del dropdown a un overlay modal independiente con paginación real (10 repos/página, prev/next, búsqueda)
+- **Eliminar creación manual de proyectos** → `showCreate`, `handleCreateProject` y botón "New Project" eliminados de `ProjectSelector.tsx`
+- **Flujo de proyecto end-to-end** → `AgentEditor` y `SkillWizard` filtran por `projectId`; crear un agente/skill lo asocia al proyecto activo; `projectId: null` → bucket "Sin proyecto"
+- **Mover/Copiar entre proyectos** → botón `⋮` en cada item de `AgentEditor` y `SkillWizard` abre menú contextual con "Move to project" / "Copy to project" sobre todos los proyectos disponibles
+- **Sidebar cleanup** → `discover`, `sync`, `workspace`, `git` eliminados de `menuItems`; `ViewType` actualizado; componentes preservados
+- **Phase 8 — migración a gitProvider.\*** → `AgentEditor` y `SkillWizard` usan `window.api.gitProvider.pushFiles` / `createPR` (confirmado)
+- **Phase 12 — scaffold servidor** → `src/server/` completo: Hono + Better Auth + Prisma (SQLite) + 5 rutas CRUD
+- **API abstraction layer** → `src/renderer/api/index.ts` exporta `api` que delega a `window.api.*` (Electron) o `fetch('/api/...')` (web, `VITE_MODE=web`); todos los componentes activos migrados
+- **Login page** → `Login.tsx` + `Login.css`: botones GitHub y Google OAuth
+- **Session-aware routing** → `App.tsx` llama `GET /api/me` en modo web; 401 → `<Login>`, 200 → app completa
+- **Monaco Editor** → `@monaco-editor/react` instalado; campo Instructions en `AgentEditor` y campo Markdown en `SkillWizard` usan Monaco (`vs-dark`, `wordWrap: on`); auto-save debounced 1 s con indicador "Saving… / Saved ✓" en modo web
+- **Scripts dev:server / dev:web** → `npm run dev:server` (Hono :3001 vía tsx), `npm run dev:web` (Vite :3000 + Hono concurrentes), proxy `/api → :3001` en Vite
+- **tsconfig `vite/client`** → resuelve `import.meta.env` sin errores de tipo
+- **Fix GitPanel `isCommitting`** → bug de scope pre-existente corregido
+
+---
+
+### ✅ COMPLETADOS (sesión anterior)
 
 Convert Agent Orchestrator into a full web application where each user manages their own agents, skills and MCPs across all their projects, authenticated via GitHub or Google OAuth.
 
@@ -179,7 +165,7 @@ MCP           — belongs to Project; config (JSON)
 GitToken      — belongs to User; provider + AES-256 encrypted token
 ```
 
-### Backend structure (`src/server/` — to be created)
+### Backend structure (`src/server/` — ✅ created and active on port 3001)
 ```
 src/server/
   index.ts              ← Hono app entry point
@@ -285,15 +271,24 @@ Every save appends a version row. The UI exposes a "History" sidebar where the u
 ## How to run
 
 ```bash
-# Development (Vite dev server + Electron with DevTools)
+# Development — Electron (default)
 npm run dev
+
+# Development — web mode (Hono :3001 + Vite :3000)
+npm run dev:web
+
+# Development — server only
+npm run dev:server
+
+# First-time DB setup (web mode)
+npx prisma migrate dev --name init
 
 # Production build
 npm run build        # builds renderer (dist/renderer/) + main (dist/main/)
 npm start            # runs from dist/
 
 # Tests
-npm test             # 66 tests, ~1.5 s
+npm test             # 86 tests, ~1.5 s
 ```
 
 ---
@@ -334,4 +329,100 @@ src/
       WorkspaceSetup.css                  MODIFIED (height fix)
       Discover.css                        MODIFIED (height fix)
 package.json                              MODIFIED (NODE_ENV in dev:main)
+
+# Session 2026-02-20
+src/renderer/
+  api/
+    index.ts                              NEW  (abstraction: Electron ↔ web fetch)
+  components/
+    Login.tsx                             NEW  (GitHub + Google OAuth buttons)
+    AgentEditor.tsx                       MODIFIED (monaco, move/copy menu, api.*)
+    SkillWizard.tsx                       MODIFIED (monaco, move/copy menu, api.*)
+    ProjectSelector.tsx                   MODIFIED (overlay modal, pagination, api.*)
+    Sidebar.tsx                           MODIFIED (only agents/skills/mcp in menu, api.*)
+    App.tsx                               MODIFIED (ViewType, session routing, Login)
+    MCPConfig.tsx                         MODIFIED (api.*)
+    ToolSelector.tsx                      MODIFIED (api.*)
+    GitPanel.tsx                          FIXED  (isCommitting scope bug)
+  styles/
+    Login.css                             NEW
+    AgentEditor.css                       MODIFIED (context menu, monaco-field, save-status)
+    SkillWizard.css                       MODIFIED (context menu, monaco-field, save-status)
+    ProjectSelector.css                   MODIFIED (import-modal overlay)
+src/server/
+  index.ts                               MODIFIED (serve() uncommented, active :3001)
+vite.config.ts                           MODIFIED (proxy /api → :3001 when VITE_MODE=web)
+tsconfig.json                            MODIFIED (types: ["vite/client"])
+package.json                             MODIFIED (dev:server, dev:web, prisma:*, tsx dep)
 ```
+
+---
+
+## AI Generation — Architecture & Enterprise Deployment
+
+### Current Implementation (Groq free tier)
+
+The AI generation feature uses **Groq** as the primary provider, serving `llama-3.3-70b-versatile` via their OpenAI-compatible API. The `openai` SDK acts as a universal client — a single `AIService.ts` handles Groq, OpenAI, and Ollama by swapping `baseURL`.
+
+**Why Groq over self-hosted Ollama:** At ~1000 req/day with ~800 output tokens, auto-hosting Ollama on a VPS without GPU ($20/mo) delivers the same cost with ~100× worse latency (~2–4 min/req on CPU). Groq provides `llama-3.3-70B` free up to 14,400 req/day with <2s latency.
+
+Env vars: `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` (see `.env.example`).
+
+### Enterprise Kubernetes + Ollama Architecture
+
+For on-premise deployments where data cannot leave the network:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                     │
+│                                                          │
+│  ┌──────────┐     ┌──────────────────────────────────┐  │
+│  │  Ingress  │────▷│  Hono API Gateway (N replicas)   │  │
+│  │  (nginx)  │     │  HPA: scale by CPU               │  │
+│  └──────────┘     └──────────┬───────────────────────┘  │
+│                               │                          │
+│       ┌───────────────────────┼───────────────────┐      │
+│       ▼                       ▼                   ▼      │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   │
+│  │ Namespace A  │   │ Namespace B │   │ Namespace C │   │
+│  │ (tenant)     │   │ (tenant)    │   │ (tenant)    │   │
+│  │             │   │             │   │             │   │
+│  │ ┌─────────┐ │   │ ┌─────────┐ │   │ ┌─────────┐ │   │
+│  │ │ App Pod │ │   │ │ App Pod │ │   │ │ App Pod │ │   │
+│  │ │+Ollama  │ │   │ │+Ollama  │ │   │ │+Ollama  │ │   │
+│  │ │ sidecar │ │   │ │ sidecar │ │   │ │ sidecar │ │   │
+│  │ └─────────┘ │   │ └─────────┘ │   │ └─────────┘ │   │
+│  └─────────────┘   └─────────────┘   └─────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Configuration tiers:**
+
+| Tier | Model | Hardware | Latency | Use case |
+|------|-------|----------|---------|----------|
+| CPU sidecar | `qwen2.5:7b` | Node ≥8 GB RAM, no GPU | ~30–60s | Background generation, cost-sensitive |
+| GPU node pool | `llama3.1:8b` | A10G (24 GB VRAM) | ~80 tok/s (<2s) | Synchronous UX, premium tier |
+
+**GPU node pool setup:** Separate node pool with taints (`nvidia.com/gpu=true:NoSchedule`) + tolerations on Ollama pods. Only provisioned when `ollama.gpuNodePool` is enabled in Helm values.
+
+**Helm chart values (sketch):**
+```yaml
+ollama:
+  enabled: false
+  model: qwen2.5:7b
+  gpuNodePool:
+    enabled: false
+    taint: nvidia.com/gpu
+    instanceType: g5.xlarge  # A10G
+  resources:
+    cpu:
+      requests: "2"
+      limits: "4"
+      memory: "8Gi"
+    gpu:
+      requests: "1"
+      limits: "1"
+      memory: "24Gi"
+```
+
+**Migration path:** Set `AI_PROVIDER=ollama` + `AI_BASE_URL=http://localhost:11434/v1` — no code changes needed. The `AIService.ts` already supports it.

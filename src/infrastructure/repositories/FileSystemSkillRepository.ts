@@ -32,6 +32,15 @@ export class FileSystemSkillRepository implements ISkillRepository {
     }
   }
 
+  async findByProjectId(projectId: string | null): Promise<Skill[]> {
+    const all = await this.findAll();
+    if (projectId === null) {
+      // Return global skills (no projectId set)
+      return all.filter(s => !s.projectId);
+    }
+    return all.filter(s => s.projectId === projectId);
+  }
+
   async findById(id: string): Promise<Skill | null> {
     try {
       const filePath = path.join(this.storageDir, `${id}.json`);
