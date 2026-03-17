@@ -6,6 +6,57 @@
   overflow: hidden;
 }
 
+/* ── Mobile: horizontal nav bar ────────────────────────────────── */
+@media (max-width: 767px) {
+  .sidebar {
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .sidebar-header,
+  .sidebar-project,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
+    width: 100%;
+    justify-content: space-around;
+    flex: 1;
+    overflow: visible;
+  }
+
+  .nav-item {
+    flex: 1;
+    justify-content: center;
+    padding: 10px 4px;
+    border-left: none !important;
+    font-size: 12px;
+  }
+
+  .nav-item.active {
+    border-left: none;
+    border-bottom: 3px solid var(--accent-blue);
+    background-color: var(--bg-tertiary);
+  }
+
+  .nav-icon {
+    margin-right: 6px;
+    font-size: 14px;
+  }
+
+  .nav-label {
+    font-size: 11px;
+  }
+}
+
 .sidebar-header {
   padding: 20px;
   border-bottom: 1px solid var(--border-color);

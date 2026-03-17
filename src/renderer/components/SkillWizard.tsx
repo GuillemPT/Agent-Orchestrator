@@ -51,7 +51,7 @@ interface SkillWizardProps {
 function SkillWizard({ projectId }: SkillWizardProps) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [currentSkill, setCurrentSkill] = useState<Skill | null>(null);
-  const [step, setStep] = useState<'metadata' | 'markdown' | 'yaml' | 'scripts'>('metadata');
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [descriptionValidation, setDescriptionValidation] = useState<{ score: number; suggestions: string[] } | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [exportPlatform, setExportPlatform] = useState<Platform>('github-copilot');
@@ -126,7 +126,6 @@ function SkillWizard({ projectId }: SkillWizardProps) {
       });
       setSkills([...skills, newSkill]);
       setCurrentSkill(newSkill);
-      setStep('metadata');
     } catch (error) {
       console.error('Failed to create skill:', error);
     }
@@ -352,17 +351,20 @@ function SkillWizard({ projectId }: SkillWizardProps) {
       });
       setSkills(prev => [...prev, newSkill]);
       setCurrentSkill(newSkill);
-      setStep('markdown');
       setShowGenerateModal(false);
     } catch (error) {
       console.error('Failed to save generated skill:', error);
     }
   };
 
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
   return (
     <div className="skill-wizard">
       <div className="wizard-header">
-        <h2>Skill Wizard</h2>
+        <h2>Skills {IS_WEB && currentSkill && <span className="save-status">{saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : ''}</span>}</h2>
         <div className="header-actions">
           {IS_WEB && (
             <button className="btn" onClick={() => setShowGenerateModal(true)}>
@@ -423,213 +425,218 @@ function SkillWizard({ projectId }: SkillWizardProps) {
             <>
               <div className="editor-header">
                 <h3>{currentSkill.metadata.name}</h3>
-                <div className="editor-actions">
-                  <button className="btn btn-primary" onClick={saveSkill}>
-                    Save
-                  </button>
-                  <button className="btn" onClick={createDirectory}>
-                    📁 Create Directory
-                  </button>
-                  <div className="export-group">
-                    <select
-                      className="platform-select"
-                      value={exportPlatform}
-                      onChange={(e) => setExportPlatform(e.target.value as Platform)}
-                    >
-                      {(Object.keys(PLATFORM_LABELS) as Platform[]).map(p => (
-                        <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>
-                      ))}
-                    </select>
-                    <button className="btn" onClick={exportToMd}>
-                      Export
+                <div className="editor-toolbar">
+                  <div className="editor-toolbar-group">
+                    <button className="btn btn-primary" onClick={saveSkill}>
+                      💾 Save
+                    </button>
+                    <button className="btn btn-danger" onClick={deleteSkill}>
+                      🗑 Delete
                     </button>
                   </div>
-                  <button className="btn" onClick={exportToYaml}>
-                    Export YAML
-                  </button>
-                  <button className="btn btn-danger" onClick={deleteSkill}>
-                    Delete
-                  </button>
-                  <button className="btn btn-github" onClick={openPRModal} title="Create GitHub Pull Request">
-                    Create PR
-                  </button>
+                  <span className="editor-toolbar-divider" />
+                  <div className="editor-toolbar-group">
+                    <div className="export-group">
+                      <select
+                        className="platform-select"
+                        value={exportPlatform}
+                        onChange={(e) => setExportPlatform(e.target.value as Platform)}
+                      >
+                        {(Object.keys(PLATFORM_LABELS) as Platform[]).map(p => (
+                          <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>
+                        ))}
+                      </select>
+                      <button className="btn" onClick={exportToMd}>
+                        Export
+                      </button>
+                    </div>
+                    <button className="btn" onClick={exportToYaml} title="Export as YAML">
+                      YAML
+                    </button>
+                  </div>
+                  <span className="editor-toolbar-divider" />
+                  <div className="editor-toolbar-group">
+                    <button className="btn" onClick={createDirectory} title="Create skill directory on disk">
+                      📁 Dir
+                    </button>
+                    <button className="btn btn-github" onClick={openPRModal} title="Create Pull Request">
+                      PR
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="wizard-steps">
-                <button
-                  className={`step ${step === 'metadata' ? 'active' : ''}`}
-                  onClick={() => setStep('metadata')}
-                >
-                  1. Metadata
-                </button>
-                <button
-                  className={`step ${step === 'markdown' ? 'active' : ''}`}
-                  onClick={() => setStep('markdown')}
-                >
-                  2. Markdown
-                </button>
-                <button
-                  className={`step ${step === 'yaml' ? 'active' : ''}`}
-                  onClick={() => setStep('yaml')}
-                >
-                  3. YAML
-                </button>
-                <button
-                  className={`step ${step === 'scripts' ? 'active' : ''}`}
-                  onClick={() => setStep('scripts')}
-                >
-                  4. Scripts
-                </button>
-              </div>
-
-              <div className="wizard-step-content">
-                {step === 'metadata' && (
-                  <div className="form-section">
-                    <h4>Skill Metadata</h4>
-                    <div className="form-group">
-                      <label>Name</label>
-                      <input
-                        type="text"
-                        value={currentSkill.metadata.name}
-                        onChange={(e) => updateField(['metadata', 'name'], e.target.value)}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Version</label>
-                      <input
-                        type="text"
-                        value={currentSkill.metadata.version}
-                        onChange={(e) => updateField(['metadata', 'version'], e.target.value)}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Description</label>
-                      <textarea
-                        value={currentSkill.metadata.description}
-                        onChange={(e) => updateField(['metadata', 'description'], e.target.value)}
-                        rows={3}
-                      />
-                      {descriptionValidation && (
-                        <div className={`validation-result ${descriptionValidation.score >= 70 ? 'good' : 'needs-improvement'}`}>
-                          <div className="validation-score">
-                            Score: {descriptionValidation.score}/100
-                          </div>
-                          {descriptionValidation.suggestions.length > 0 && (
-                            <ul className="validation-suggestions">
-                              {descriptionValidation.suggestions.map((suggestion, idx) => (
-                                <li key={idx}>{suggestion}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                      {isValidating && <div className="validating">Validating description...</div>}
-                    </div>
-                    <div className="form-group">
-                      <label>Category</label>
-                      <input
-                        type="text"
-                        value={currentSkill.metadata.category || ''}
-                        onChange={(e) => updateField(['metadata', 'category'], e.target.value)}
-                        placeholder="e.g., Development, Testing, Deployment"
-                      />
-                    </div>
+              <div className="skill-unified-editor">
+                {/* Metadata */}
+                <div className="skill-section-card">
+                  <div className="skill-section-header" onClick={() => toggleSection('metadata')}>
+                    <h4>📋 Metadata</h4>
+                    <span className={`skill-section-toggle ${collapsedSections.metadata ? 'collapsed' : ''}`}>▼</span>
                   </div>
-                )}
-
-                {step === 'markdown' && (
-                  <div className="form-section">
-                    <h4>Skill Documentation (Markdown) {IS_WEB && <span className="save-status">{saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : ''}</span>}</h4>
-                    <div className="form-group monaco-field">
-                      <Editor
-                        height="340px"
-                        language="markdown"
-                        theme="vs-dark"
-                        value={currentSkill.markdown || ''}
-                        options={{ minimap: { enabled: false }, wordWrap: 'on', scrollBeyondLastLine: false }}
-                        onChange={value => updateField(['markdown'], value ?? '')}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {step === 'yaml' && (
-                  <div className="form-section">
-                    <h4>YAML Configuration</h4>
-                    <div className="form-group">
-                      <label>Schema (optional)</label>
-                      <input
-                        type="text"
-                        value={currentSkill.yaml?.schema || ''}
-                        onChange={(e) => updateField(['yaml', 'schema'], e.target.value)}
-                        placeholder="YAML schema URL or type"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Content</label>
-                      <textarea
-                        value={currentSkill.yaml?.content || ''}
-                        onChange={(e) => updateField(['yaml', 'content'], e.target.value)}
-                        rows={15}
-                        placeholder="Enter YAML configuration..."
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {step === 'scripts' && (
-                  <div className="form-section">
-                    <h4>Scripts</h4>
-                    {currentSkill.scripts.map((script, index) => (
-                      <div key={index} className="script-item">
-                        <div className="script-header">
-                          <h5>Script {index + 1}</h5>
-                          <button
-                            className="btn btn-sm btn-danger"
-                            onClick={() => removeScript(index)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                        <div className="form-group">
-                          <label>Language</label>
-                          <select
-                            value={script.language}
-                            onChange={(e) => updateScript(index, 'language', e.target.value)}
-                          >
-                            <option value="bash">Bash</option>
-                            <option value="python">Python</option>
-                            <option value="javascript">JavaScript</option>
-                            <option value="typescript">TypeScript</option>
-                            <option value="powershell">PowerShell</option>
-                          </select>
-                        </div>
-                        <div className="form-group">
-                          <label>Path (optional)</label>
-                          <input
-                            type="text"
-                            value={script.path || ''}
-                            onChange={(e) => updateScript(index, 'path', e.target.value)}
-                            placeholder="scripts/example.sh"
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label>Content</label>
-                          <textarea
-                            value={script.content}
-                            onChange={(e) => updateScript(index, 'content', e.target.value)}
-                            rows={10}
-                            placeholder="Enter script content..."
-                          />
-                        </div>
+                  {!collapsedSections.metadata && (
+                    <div className="skill-section-body">
+                      <div className="form-group">
+                        <label>Name</label>
+                        <input
+                          type="text"
+                          value={currentSkill.metadata.name}
+                          onChange={(e) => updateField(['metadata', 'name'], e.target.value)}
+                        />
                       </div>
-                    ))}
-                    <button className="btn" onClick={addScript}>
-                      + Add Script
-                    </button>
+                      <div className="form-group">
+                        <label>Version</label>
+                        <input
+                          type="text"
+                          value={currentSkill.metadata.version}
+                          onChange={(e) => updateField(['metadata', 'version'], e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Description</label>
+                        <textarea
+                          value={currentSkill.metadata.description}
+                          onChange={(e) => updateField(['metadata', 'description'], e.target.value)}
+                          rows={3}
+                        />
+                        {descriptionValidation && (
+                          <div className={`validation-result ${descriptionValidation.score >= 70 ? 'good' : 'needs-improvement'}`}>
+                            <div className="validation-score">
+                              Score: {descriptionValidation.score}/100
+                            </div>
+                            {descriptionValidation.suggestions.length > 0 && (
+                              <ul className="validation-suggestions">
+                                {descriptionValidation.suggestions.map((suggestion, idx) => (
+                                  <li key={idx}>{suggestion}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                        {isValidating && <div className="validating">Validating description...</div>}
+                      </div>
+                      <div className="form-group">
+                        <label>Category</label>
+                        <input
+                          type="text"
+                          value={currentSkill.metadata.category || ''}
+                          onChange={(e) => updateField(['metadata', 'category'], e.target.value)}
+                          placeholder="e.g., Development, Testing, Deployment"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Markdown */}
+                <div className="skill-section-card">
+                  <div className="skill-section-header" onClick={() => toggleSection('markdown')}>
+                    <h4>📝 Documentation (Markdown)</h4>
+                    <span className={`skill-section-toggle ${collapsedSections.markdown ? 'collapsed' : ''}`}>▼</span>
                   </div>
-                )}
+                  {!collapsedSections.markdown && (
+                    <div className="skill-section-body">
+                      <div className="form-group monaco-field">
+                        <Editor
+                          height="340px"
+                          language="markdown"
+                          theme="vs-dark"
+                          value={currentSkill.markdown || ''}
+                          options={{ minimap: { enabled: false }, wordWrap: 'on', scrollBeyondLastLine: false }}
+                          onChange={value => updateField(['markdown'], value ?? '')}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* YAML */}
+                <div className="skill-section-card">
+                  <div className="skill-section-header" onClick={() => toggleSection('yaml')}>
+                    <h4>⚙️ YAML Configuration</h4>
+                    <span className={`skill-section-toggle ${collapsedSections.yaml ? 'collapsed' : ''}`}>▼</span>
+                  </div>
+                  {!collapsedSections.yaml && (
+                    <div className="skill-section-body">
+                      <div className="form-group">
+                        <label>Schema (optional)</label>
+                        <input
+                          type="text"
+                          value={currentSkill.yaml?.schema || ''}
+                          onChange={(e) => updateField(['yaml', 'schema'], e.target.value)}
+                          placeholder="YAML schema URL or type"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Content</label>
+                        <textarea
+                          value={currentSkill.yaml?.content || ''}
+                          onChange={(e) => updateField(['yaml', 'content'], e.target.value)}
+                          rows={15}
+                          placeholder="Enter YAML configuration..."
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Scripts */}
+                <div className="skill-section-card">
+                  <div className="skill-section-header" onClick={() => toggleSection('scripts')}>
+                    <h4>📜 Scripts ({currentSkill.scripts.length})</h4>
+                    <span className={`skill-section-toggle ${collapsedSections.scripts ? 'collapsed' : ''}`}>▼</span>
+                  </div>
+                  {!collapsedSections.scripts && (
+                    <div className="skill-section-body">
+                      {currentSkill.scripts.map((script, index) => (
+                        <div key={index} className="script-item">
+                          <div className="script-header">
+                            <h5>Script {index + 1}</h5>
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => removeScript(index)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <div className="form-group">
+                            <label>Language</label>
+                            <select
+                              value={script.language}
+                              onChange={(e) => updateScript(index, 'language', e.target.value)}
+                            >
+                              <option value="bash">Bash</option>
+                              <option value="python">Python</option>
+                              <option value="javascript">JavaScript</option>
+                              <option value="typescript">TypeScript</option>
+                              <option value="powershell">PowerShell</option>
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Path (optional)</label>
+                            <input
+                              type="text"
+                              value={script.path || ''}
+                              onChange={(e) => updateScript(index, 'path', e.target.value)}
+                              placeholder="scripts/example.sh"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Content</label>
+                            <textarea
+                              value={script.content}
+                              onChange={(e) => updateScript(index, 'content', e.target.value)}
+                              rows={10}
+                              placeholder="Enter script content..."
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      <button className="btn" onClick={addScript}>
+                        + Add Script
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           ) : (

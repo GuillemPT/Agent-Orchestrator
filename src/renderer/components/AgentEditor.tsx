@@ -80,6 +80,8 @@ function AgentEditor({ agentId, onAgentChange, projectId }: AgentEditorProps) {
   const [contextMenuAgentId, setContextMenuAgentId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [pushStatus, setPushStatus] = useState<'idle' | 'pushing' | 'success' | 'error'>('idle');
+  const [pushError, setPushError] = useState<string | null>(null);
 
   // Auto-save in web mode (debounced, 1 s)
   useEffect(() => {
@@ -273,6 +275,51 @@ function AgentEditor({ agentId, onAgentChange, projectId }: AgentEditorProps) {
     }
   };
 
+  const handlePushToMain = async () => {
+    if (!currentAgent) return;
+    if (connectedProviders.length === 0) {
+      setPushError('No providers connected. Go to Settings to connect.');
+      setPushStatus('error');
+      return;
+    }
+    if (!prOwnerRepo) {
+      const repo = prompt('Enter repository (owner/repo):');
+      if (!repo) return;
+      setPrOwnerRepo(repo);
+      // Use the value directly since state won't be updated yet
+      doPushToMain(repo);
+      return;
+    }
+    doPushToMain(prOwnerRepo);
+  };
+
+  const doPushToMain = async (ownerRepo: string) => {
+    if (!currentAgent) return;
+    const [owner, repo] = ownerRepo.split('/');
+    if (!owner || !repo) {
+      setPushError('Invalid repository format. Use owner/repo.');
+      setPushStatus('error');
+      return;
+    }
+    const provider = connectedProviders[0];
+    setPushStatus('pushing');
+    setPushError(null);
+    try {
+      const content = await api.agent.exportToMd(currentAgent, 'github-copilot');
+      await api.gitProvider.pushFiles(
+        provider.type,
+        owner, repo, 'main', 'main',
+        [{ path: '.github/copilot-instructions.md', content }],
+        `chore: update ${currentAgent.metadata.name} agent config`,
+      );
+      setPushStatus('success');
+      setTimeout(() => setPushStatus('idle'), 3000);
+    } catch (e: any) {
+      setPushError(e?.message || String(e));
+      setPushStatus('error');
+    }
+  };
+
   const updateField = (path: string[], value: any) => {
     if (!currentAgent) return;
 
@@ -436,6 +483,20 @@ function AgentEditor({ agentId, onAgentChange, projectId }: AgentEditorProps) {
                       <button className="btn btn-github" onClick={openPRModal} title="Create Pull Request">
                         Create PR
                       </button>
+                      <button
+                        className="btn btn-push-main"
+                        onClick={handlePushToMain}
+                        disabled={pushStatus === 'pushing'}
+                        title="Push agent directly to main branch"
+                      >
+                        {pushStatus === 'pushing' ? '⏳ Pushing…' : '🚀 Push to Main'}
+                      </button>
+                      {pushStatus === 'success' && (
+                        <span className="push-main-status success">✓ Pushed</span>
+                      )}
+                      {pushStatus === 'error' && (
+                        <span className="push-main-status error" title={pushError || ''}>✕ Failed</span>
+                      )}
                     </>
                   ) : (
                     <>

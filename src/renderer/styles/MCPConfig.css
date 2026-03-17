@@ -294,3 +294,48 @@
   font-size: 11px;
   line-height: 1.4;
 }
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .mcp-config {
+    flex-direction: column;
+  }
+
+  .mcp-sidebar {
+    width: 100%;
+    max-height: 150px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .mcp-servers-layout {
+    flex-direction: column;
+  }
+
+  .mcp-server-list {
+    width: 100%;
+    max-height: 120px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .mcp-project-header {
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .mcp-project-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mcp-sidebar {
+    width: 180px;
+  }
+
+  .mcp-server-list {
+    width: 150px;
+  }
+}

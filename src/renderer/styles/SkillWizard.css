@@ -198,7 +198,7 @@
 }
 
 .wizard-step-content {
-  max-width: 800px;
+  width: 100%;
 }
 
 .script-item {
@@ -294,4 +294,168 @@
   font-weight: 400;
   color: var(--text-secondary);
   margin-left: 8px;
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .wizard-header {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .wizard-header h2 {
+    font-size: 14px;
+  }
+
+  .wizard-content {
+    flex-direction: column;
+  }
+
+  .skill-list {
+    width: 100%;
+    max-height: 180px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .skill-editor {
+    padding: 16px;
+  }
+
+  .editor-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .editor-actions {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .wizard-steps {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .wizard-steps .step {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .wizard-step-content {
+    max-width: 100%;
+  }
+
+  .form-section {
+    padding: 12px;
+  }
+
+  .export-group {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .export-group .platform-select {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .skill-list {
+    width: 180px;
+  }
+
+  .skill-editor {
+    padding: 16px;
+  }
+
+  .editor-actions {
+    flex-wrap: wrap;
+  }
+
+  .wizard-step-content {
+    max-width: 100%;
+  }
+}
+
+/* ── Simplified editor toolbar ────────────────────────────── */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editor-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editor-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 4px;
+}
+
+@media (max-width: 767px) {
+  .editor-toolbar-divider {
+    display: none;
+  }
+}
+
+/* ── All-in-one editor layout ────────────────────────────── */
+.skill-unified-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.skill-section-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.skill-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+}
+
+.skill-section-header h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.skill-section-toggle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+
+.skill-section-toggle.collapsed {
+  transform: rotate(-90deg);
+}
+
+.skill-section-body {
+  padding: 16px;
+}
+
+@media (max-width: 767px) {
+  .skill-section-body {
+    padding: 12px;
+  }
 }
