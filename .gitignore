@@ -32,3 +32,9 @@ npm-debug.log*
 # Temp
 .tmp/
 *.tmp
+
+# Playwright test artifacts
+.playwright-mcp/
+
+# Database
+src/server/prisma/dev.db
