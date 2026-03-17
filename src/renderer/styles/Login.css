@@ -85,6 +85,33 @@
   flex-shrink: 0;
 }
 
+.login-btn-dev {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-weight: 600;
+}
+
+.login-btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.login-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+
+.login-hint code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
 .login-footer {
   font-size: 11px;
   color: var(--text-secondary);

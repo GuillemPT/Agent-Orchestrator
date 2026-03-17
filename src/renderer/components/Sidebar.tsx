@@ -3,6 +3,9 @@ import { ViewType } from '../App';
 import { ProjectSelector } from './ProjectSelector';
 import '../styles/Sidebar.css';
 import { api } from '../api';
+import { signOut, getSession } from '../api/auth';
+
+const IS_WEB = import.meta.env.VITE_MODE === 'web';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -22,11 +25,15 @@ const PROVIDER_ICONS: Record<string, string> = {
 
 function Sidebar({ currentView, onViewChange, currentProjectId, onProjectChange }: SidebarProps) {
   const [connectedAccounts, setConnectedAccounts] = useState<{ type: string; user: { login: string; avatar_url: string } }[]>([]);
+  const [user, setUser] = useState<{ name?: string; email: string; avatar?: string } | null>(null);
 
   useEffect(() => {
     api.gitProvider.getConnectedAccounts()
       .then(setConnectedAccounts)
       .catch(() => setConnectedAccounts([]));
+    if (IS_WEB) {
+      getSession().then(setUser).catch(() => {});
+    }
   }, []);
 
   // Refresh accounts when settings view is left (user may have just connected)
@@ -73,6 +80,20 @@ function Sidebar({ currentView, onViewChange, currentProjectId, onProjectChange 
         ))}
       </nav>
       <div className="sidebar-footer">
+        {/* User profile (web mode) */}
+        {IS_WEB && user && (
+          <div className="sidebar-user">
+            {user.avatar ? (
+              <img src={user.avatar} alt="" className="sidebar-user-avatar" />
+            ) : (
+              <span className="sidebar-user-avatar-placeholder">👤</span>
+            )}
+            <span className="sidebar-user-name">{user.name || user.email}</span>
+            <button className="btn btn-xs sidebar-logout-btn" onClick={signOut} title="Sign out">
+              ↪
+            </button>
+          </div>
+        )}
         {/* Connected provider badges */}
         {connectedAccounts.length > 0 ? (
           <div className="providers-strip">

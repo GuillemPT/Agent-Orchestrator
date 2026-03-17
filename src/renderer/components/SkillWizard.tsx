@@ -110,9 +110,13 @@ function SkillWizard({ projectId }: SkillWizardProps) {
   };
 
   const createNewSkill = async () => {
+    if (!projectId) {
+      alert('Please select a project first to create a new skill.');
+      return;
+    }
     try {
       const newSkill = await api.skill.create({
-        projectId: projectId ?? undefined,  // Assign to current project
+        projectId,  // Assign to current project
         metadata: {
           name: 'New Skill',
           version: '1.0.0',

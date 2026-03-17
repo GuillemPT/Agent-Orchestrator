@@ -7,6 +7,7 @@ export interface Project {
   description?: string;
   repoUrl?: string;           // Optional link to Git repository
   localPath?: string;         // Optional local workspace path
+  deletedAt?: string | null;  // Soft delete timestamp (null = active)
   createdAt: string;
   updatedAt: string;
 }

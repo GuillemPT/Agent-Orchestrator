@@ -67,7 +67,7 @@ function ProviderCard({ type, initialUser, initialClientId, onConnect, onDisconn
 
   const saveClientId = async () => {
     if (!clientId.trim()) return;
-    await window.api.gitProvider.setClientId(type, clientId.trim());
+    await api.gitProvider.setClientId(type, clientId.trim());
     setClientIdSaved(true);
     setError(null);
   };
@@ -77,10 +77,10 @@ function ProviderCard({ type, initialUser, initialClientId, onConnect, onDisconn
     if (meta.supportsDeviceFlow) {
       try {
         setState('device-flow');
-        const init = await window.api.gitProvider.startDeviceFlow(type);
+        const init = await api.gitProvider.startDeviceFlow(type);
         setDeviceFlow(init);
         setState('polling');
-        const connectedUser = await window.api.gitProvider.completeDeviceFlow(type, init);
+        const connectedUser = await api.gitProvider.completeDeviceFlow(type, init);
         setUser(connectedUser);
         setState('connected');
         onConnect(type, connectedUser);
@@ -92,7 +92,7 @@ function ProviderCard({ type, initialUser, initialClientId, onConnect, onDisconn
       // Bitbucket App Password
       try {
         setState('polling');
-        const connectedUser = await window.api.gitProvider.connectAppPassword(type, bbPassword, { username: bbUsername });
+        const connectedUser = await api.gitProvider.connectAppPassword(type, bbPassword, { username: bbUsername });
         setUser(connectedUser);
         setState('connected');
         onConnect(type, connectedUser);
@@ -104,7 +104,7 @@ function ProviderCard({ type, initialUser, initialClientId, onConnect, onDisconn
   };
 
   const disconnect = async () => {
-    await window.api.gitProvider.disconnect(type);
+    await api.gitProvider.disconnect(type);
     setUser(null);
     setDeviceFlow(null);
     setState('idle');
@@ -255,8 +255,8 @@ export default function Settings() {
 
   useEffect(() => {
     Promise.all([
-      window.api.gitProvider.getConnectedAccounts(),
-      window.api.gitProvider.getSettings(),
+      api.gitProvider.getConnectedAccounts(),
+      api.gitProvider.getSettings(),
     ]).then(([accts, setts]) => {
       setAccounts(accts);
       setSettings(setts);
@@ -280,7 +280,7 @@ export default function Settings() {
     setTestingConnections(true);
     setConnectionTestResult(null);
     try {
-      const accts = await window.api.gitProvider.getConnectedAccounts();
+      const accts = await api.gitProvider.getConnectedAccounts();
       setAccounts(accts);
       if (accts.length === 0) {
         setConnectionTestResult('No providers connected.');

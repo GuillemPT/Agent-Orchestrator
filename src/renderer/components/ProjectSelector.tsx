@@ -5,6 +5,14 @@ import { api } from '../api';
 
 const PAGE_SIZE = 10;
 
+interface DiscoveredItem {
+  type: 'agent' | 'skill' | 'mcp';
+  name: string;
+  path: string;
+  platform: string;
+  content: string;
+}
+
 interface ProjectSelectorProps {
   currentProjectId: string | null;
   onProjectChange: (projectId: string | null) => void;
@@ -24,6 +32,15 @@ export function ProjectSelector({ currentProjectId, onProjectChange }: ProjectSe
   const [importPage, setImportPage] = useState(0);
   const [menuOpenProjectId, setMenuOpenProjectId] = useState<string | null>(null);
   const [providerLoadError, setProviderLoadError] = useState<string | null>(null);
+  // Discovery state
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
+  const [discoveryProjectId, setDiscoveryProjectId] = useState<string | null>(null);
+  const [discoveryProjectName, setDiscoveryProjectName] = useState('');
+  const [discoveredItems, setDiscoveredItems] = useState<DiscoveredItem[]>([]);
+  const [selectedDiscovered, setSelectedDiscovered] = useState<Set<number>>(new Set());
+  const [discovering, setDiscovering] = useState(false);
+  const [importingDiscovered, setImportingDiscovered] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -143,6 +160,60 @@ export function ProjectSelector({ currentProjectId, onProjectChange }: ProjectSe
     setSelectedRepos(new Set());
     setImporting(false);
     setShowImportModal(false);
+
+    // Auto-trigger discovery for the first imported project that has a repoUrl
+    const firstWithRepo = newProjects.find(p => p.repoUrl);
+    if (firstWithRepo) {
+      runDiscovery(firstWithRepo.id, firstWithRepo.name);
+    }
+  };
+
+  const runDiscovery = async (projectId: string, projectName: string) => {
+    setDiscoveryProjectId(projectId);
+    setDiscoveryProjectName(projectName);
+    setDiscoveredItems([]);
+    setSelectedDiscovered(new Set());
+    setDiscoveryError(null);
+    setDiscovering(true);
+    setShowDiscoveryModal(true);
+
+    try {
+      const result = await api.project.discover(projectId);
+      setDiscoveredItems(result.items ?? []);
+      // Select all by default
+      setSelectedDiscovered(new Set((result.items ?? []).map((_: any, i: number) => i)));
+    } catch (err: any) {
+      setDiscoveryError(err.message || 'Discovery failed');
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const handleImportDiscovered = async () => {
+    if (!discoveryProjectId || selectedDiscovered.size === 0) return;
+    setImportingDiscovered(true);
+    try {
+      const items = discoveredItems.filter((_, i) => selectedDiscovered.has(i));
+      const result = await api.project.importDiscovered(discoveryProjectId, items);
+      setShowDiscoveryModal(false);
+      loadProjects(); // refresh counts
+      if (result.created?.skipped > 0) {
+        alert(`Imported successfully. ${result.created.skipped} item(s) were skipped (already exist).`);
+      }
+    } catch (err) {
+      console.error('Failed to import discovered items:', err);
+    } finally {
+      setImportingDiscovered(false);
+    }
+  };
+
+  const toggleDiscoveredItem = (idx: number) => {
+    setSelectedDiscovered(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
   };
 
   const handleSelectProject = (projectId: string | null) => {
@@ -151,13 +222,32 @@ export function ProjectSelector({ currentProjectId, onProjectChange }: ProjectSe
     setMenuOpenProjectId(null);
   };
 
+  const handleClearItems = async (id: string, name: string) => {
+    if (!confirm(`Clear all imported agents, skills and MCP configs from "${name}"?\nYou can re-scan the repository afterwards.`)) return;
+    try {
+      const result = await api.project.clearItems(id);
+      const d = result.deleted;
+      alert(`Cleared: ${d.agents} agent(s), ${d.skills} skill(s), ${d.mcps} MCP config(s).`);
+      // Refresh project list to update counts
+      loadProjects();
+      // If viewing this project, re-trigger a UI refresh
+      if (currentProjectId === id) {
+        onProjectChange(null);
+        setTimeout(() => onProjectChange(id), 0);
+      }
+    } catch (err) {
+      console.error('Failed to clear items:', err);
+    }
+  };
+
   const handleDeleteProject = async (id: string) => {
     const project = projects.find(p => p.id === id);
     if (!confirm(`Remove "${project?.name}"?\nThis will not delete its agents or skills.`)) return;
     try {
       await api.project.delete(id);
       setProjects(prev => prev.filter(p => p.id !== id));
-      if (currentProjectId === id) onProjectChange(null);
+      // Always switch to "All Projects" after deleting so agents/skills refresh
+      onProjectChange(null);
       setMenuOpenProjectId(null);
       setIsOpen(false);
     } catch (err) {
@@ -236,6 +326,16 @@ export function ProjectSelector({ currentProjectId, onProjectChange }: ProjectSe
                     <button className="project-option-inline-item"
                             onClick={() => { handleSelectProject(project.id); setMenuOpenProjectId(null); }}>
                       📌 Select
+                    </button>
+                    {project.repoUrl && (
+                      <button className="project-option-inline-item"
+                              onClick={() => { runDiscovery(project.id, project.name); setMenuOpenProjectId(null); setIsOpen(false); }}>
+                        🔍 Scan for agents/skills
+                      </button>
+                    )}
+                    <button className="project-option-inline-item"
+                            onClick={() => { handleClearItems(project.id, project.name); setMenuOpenProjectId(null); }}>
+                      🧹 Clear imported items
                     </button>
                     <button className="project-option-inline-item project-option-delete"
                             onClick={() => handleDeleteProject(project.id)}>
@@ -364,6 +464,79 @@ export function ProjectSelector({ currentProjectId, onProjectChange }: ProjectSe
                       disabled={importing || selectedRepos.size === 0}
                     >
                       {importing ? 'Importing…' : `Import ${selectedRepos.size > 0 ? selectedRepos.size : ''} Project${selectedRepos.size !== 1 ? 's' : ''}`}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Discovery Modal ───────────────────────────────────────────────── */}
+      {showDiscoveryModal && (
+        <div className="import-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowDiscoveryModal(false); }}>
+          <div className="import-modal">
+            <div className="import-modal-header">
+              <h3>🔍 Scan: {discoveryProjectName}</h3>
+              <button className="btn btn-xs import-modal-close" onClick={() => setShowDiscoveryModal(false)}>✕</button>
+            </div>
+
+            {discovering ? (
+              <div className="project-import-loading">
+                Scanning repository for agents, skills and MCP configs…
+              </div>
+            ) : discoveryError ? (
+              <div className="import-modal-empty" style={{ color: 'var(--text-error, #f44)' }}>
+                {discoveryError}
+              </div>
+            ) : discoveredItems.length === 0 ? (
+              <div className="import-modal-empty">
+                No agents, skills or MCP configs found in this repository.
+              </div>
+            ) : (
+              <>
+                <div style={{ padding: '8px 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Found {discoveredItems.length} item{discoveredItems.length !== 1 ? 's' : ''}. Select which to import:
+                </div>
+                <div className="import-modal-repos">
+                  {discoveredItems.map((item, idx) => {
+                    const isSelected = selectedDiscovered.has(idx);
+                    const typeIcons: Record<string, string> = { agent: '🤖', skill: '⚡', mcp: '🔧' };
+                    return (
+                      <label key={idx} className={`project-import-repo ${isSelected ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleDiscoveredItem(idx)}
+                          className="project-import-checkbox"
+                        />
+                        <span className="project-import-repo-icon">
+                          {typeIcons[item.type] ?? '📄'}
+                        </span>
+                        <div className="project-import-repo-info">
+                          <span className="project-import-repo-name">
+                            {item.name}
+                          </span>
+                          <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.6, textTransform: 'uppercase' }}>{item.type}</span>
+                          <span className="project-import-repo-desc">{item.path} · {item.platform}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="import-modal-footer">
+                  <span className="project-import-count">{selectedDiscovered.size} selected</span>
+                  <div className="import-modal-footer-actions">
+                    <button className="btn btn-sm" onClick={() => setShowDiscoveryModal(false)}>
+                      Skip
+                    </button>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={handleImportDiscovered}
+                      disabled={importingDiscovered || selectedDiscovered.size === 0}
+                    >
+                      {importingDiscovered ? 'Importing…' : `Import ${selectedDiscovered.size} Item${selectedDiscovered.size !== 1 ? 's' : ''}`}
                     </button>
                   </div>
                 </div>

@@ -20,26 +20,27 @@ const verifyProject = async (projectId: string, userId: string) => {
   });
 };
 
-// List all agents for a project
+// List all agents for a project (or all if no projectId given)
 agents.get('/', requireAuth, async (c) => {
   const session = c.get('session')!;
   const projectId = c.req.query('projectId');
   
-  if (!projectId) {
-    return c.json({ error: 'projectId query parameter required' }, 400);
-  }
-  
-  // Verify project ownership
-  const project = await verifyProject(projectId, session.user.id);
-  if (!project) {
-    return c.json({ error: 'Project not found' }, 404);
+  if (projectId) {
+    // Verify project ownership
+    const project = await verifyProject(projectId, session.user.id);
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
   }
   
   const agentList = await prisma.agent.findMany({
-    where: { projectId },
+    where: projectId
+      ? { projectId }
+      : { project: { userId: session.user.id, deletedAt: null } },
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true,
+      projectId: true,
       name: true,
       version: true,
       createdAt: true,
@@ -256,6 +257,92 @@ agents.post('/:id/versions/:versionId/restore', requireAuth, async (c) => {
     createdAt: updated.createdAt,
     updatedAt: updated.updatedAt,
   });
+});
+
+// ── Export ───────────────────────────────────────────────────────────────────
+
+function exportAgentForCopilot(agent: any): string {
+  let md = '---\n';
+  md += `name: ${agent.metadata.name}\n`;
+  md += `version: ${agent.metadata.version}\n`;
+  md += `description: ${agent.metadata.description}\n`;
+  if (agent.metadata.author) md += `author: ${agent.metadata.author}\n`;
+  if (agent.metadata.tags?.length) md += `tags: [${agent.metadata.tags.join(', ')}]\n`;
+  md += '---\n\n';
+  md += `# ${agent.metadata.name}\n\n${agent.metadata.description}\n\n`;
+  if (agent.skills?.length) {
+    md += '## Skills\n\n';
+    agent.skills.forEach((s: any) => { md += `### ${s.name}\n${s.description}\n\n`; });
+  }
+  if (agent.mcpConfig?.tools?.length) {
+    md += '## MCP Tools\n\n';
+    agent.mcpConfig.tools.forEach((t: string) => { md += `- ${t}\n`; });
+    md += '\n';
+  }
+  if (agent.instructions) md += `## Instructions\n\n${agent.instructions}\n`;
+  return md;
+}
+
+function exportAgentForClaude(agent: any): string {
+  let md = `# ${agent.metadata.name}\n\n> ${agent.metadata.description}\n\n`;
+  if (agent.metadata.author) md += `**Author:** ${agent.metadata.author}  \n`;
+  md += `**Version:** ${agent.metadata.version}\n\n`;
+  if (agent.skills?.length) {
+    md += '## Skills\n\n';
+    agent.skills.forEach((s: any) => { md += `- **${s.name}**: ${s.description}\n`; });
+    md += '\n';
+  }
+  if (agent.mcpConfig?.tools?.length) {
+    md += '## Available MCP Tools\n\n';
+    agent.mcpConfig.tools.forEach((t: string) => { md += `- \`${t}\`\n`; });
+    md += '\n';
+  }
+  if (agent.instructions) md += `## Instructions\n\n${agent.instructions}\n`;
+  return md;
+}
+
+function exportAgentForCursor(agent: any): string {
+  let mdc = `---\ndescription: ${agent.metadata.description}\nglobs:\nalwaysApply: false\n---\n\n`;
+  mdc += `# ${agent.metadata.name}\n\n${agent.metadata.description}\n\n`;
+  if (agent.skills?.length) {
+    mdc += '## Skills\n\n';
+    agent.skills.forEach((s: any) => { mdc += `- **${s.name}**: ${s.description}\n`; });
+    mdc += '\n';
+  }
+  if (agent.instructions) mdc += `## Instructions\n\n${agent.instructions}\n`;
+  return mdc;
+}
+
+function exportAgentToMd(agent: any, platform: string = 'github-copilot'): string {
+  switch (platform) {
+    case 'claude': return exportAgentForClaude(agent);
+    case 'cursor': return exportAgentForCursor(agent);
+    case 'antigravity': return JSON.stringify({
+      name: agent.metadata.name, version: agent.metadata.version,
+      description: agent.metadata.description, author: agent.metadata.author,
+      tags: agent.metadata.tags || [], skills: (agent.skills || []).map((s: any) => ({ name: s.name, description: s.description })),
+      mcpTools: agent.mcpConfig?.tools || [], instructions: agent.instructions || '',
+    }, null, 2);
+    case 'opencode': {
+      let md = `# ${agent.metadata.name}\n\n${agent.metadata.description}\n\n`;
+      if (agent.skills?.length) {
+        md += '## Skills\n\n';
+        agent.skills.forEach((s: any) => { md += `### ${s.name}\n\n${s.description}\n\n`; });
+      }
+      if (agent.instructions) md += `## Instructions\n\n${agent.instructions}\n`;
+      return md;
+    }
+    default: return exportAgentForCopilot(agent);
+  }
+}
+
+// Export agent to markdown
+agents.post('/export-md', requireAuth, async (c) => {
+  const body = await c.req.json();
+  const { agent, platform } = body;
+  if (!agent) return c.json({ error: 'agent required' }, 400);
+  const content = exportAgentToMd(agent, platform);
+  return c.json(content);
 });
 
 export default agents;

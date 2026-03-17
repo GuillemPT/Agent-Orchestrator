@@ -161,9 +161,13 @@ function AgentEditor({ agentId, onAgentChange, projectId }: AgentEditorProps) {
   };
 
   const createNewAgent = async () => {
+    if (!projectId) {
+      alert('Please select a project first to create a new agent.');
+      return;
+    }
     try {
       const newAgent = await api.agent.create({
-        projectId: projectId ?? undefined,  // Assign to current project
+        projectId,  // Assign to current project
         metadata: {
           name: 'New Agent',
           version: '1.0.0',

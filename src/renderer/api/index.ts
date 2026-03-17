@@ -39,22 +39,61 @@ function del<T>(path: string): Promise<T> {
 
 // ── web implementations ───────────────────────────────────────────────────
 
+// Transform flat server agent into the nested format the UI expects
+function toAgentUI(a: any): any {
+  if (a.metadata) return a; // already nested
+  const { id, projectId, name, version, createdAt, updatedAt, ...rest } = a;
+  return {
+    id, projectId, createdAt, updatedAt,
+    metadata: { name, version, description: rest.description ?? '', compatibility: rest.compatibility ?? [], ...rest },
+    skills: rest.skills ?? [],
+    mcpConfig: rest.mcpConfig ?? {},
+    instructions: rest.instructions,
+  };
+}
+
+// Transform flat server skill into the nested format the UI expects
+function toSkillUI(s: any): any {
+  if (s.metadata) return s; // already nested
+  const { id, projectId, name, version, createdAt, updatedAt, ...rest } = s;
+  return {
+    id, projectId, createdAt, updatedAt,
+    metadata: { name, version: version ?? '1.0.0', description: rest.description ?? '', category: rest.category },
+    markdown: rest.markdown,
+    yaml: rest.yaml,
+    scripts: rest.scripts ?? [],
+  };
+}
+
 const webApi = {
   agent: {
-    getAll: () => fetchJSON<any[]>('/api/agents'),
-    getById: (id: string) => fetchJSON<any>(`/api/agents/${id}`),
-    create: (data: any) => post<any>('/api/agents', data),
-    update: (id: string, updates: any) => put<any>(`/api/agents/${id}`, updates),
+    getAll: () => fetchJSON<any[]>('/api/agents').then(list => list.map(toAgentUI)),
+    getById: (id: string) => fetchJSON<any>(`/api/agents/${id}`).then(toAgentUI),
+    create: (data: any) => {
+      // Flatten metadata for the server
+      const { metadata, ...rest } = data;
+      return post<any>('/api/agents', { ...rest, ...metadata }).then(toAgentUI);
+    },
+    update: (id: string, updates: any) => {
+      const { metadata, ...rest } = updates;
+      return put<any>(`/api/agents/${id}`, { ...rest, ...metadata }).then(toAgentUI);
+    },
     delete: (id: string) => del<void>(`/api/agents/${id}`),
     exportToMd: (agent: any, platform?: string) =>
       post<string>('/api/agents/export-md', { agent, platform }),
   },
 
   skill: {
-    getAll: () => fetchJSON<any[]>('/api/skills'),
-    getById: (id: string) => fetchJSON<any>(`/api/skills/${id}`),
-    create: (data: any) => post<any>('/api/skills', data),
-    update: (id: string, updates: any) => put<any>(`/api/skills/${id}`, updates),
+    getAll: () => fetchJSON<any[]>('/api/skills').then(list => list.map(toSkillUI)),
+    getById: (id: string) => fetchJSON<any>(`/api/skills/${id}`).then(toSkillUI),
+    create: (data: any) => {
+      const { metadata, ...rest } = data;
+      return post<any>('/api/skills', { ...rest, ...metadata }).then(toSkillUI);
+    },
+    update: (id: string, updates: any) => {
+      const { metadata, ...rest } = updates;
+      return put<any>(`/api/skills/${id}`, { ...rest, ...metadata }).then(toSkillUI);
+    },
     delete: (id: string) => del<void>(`/api/skills/${id}`),
     exportToMd: (skill: any, platform?: string) =>
       post<string>('/api/skills/export-md', { skill, platform }),
@@ -72,6 +111,10 @@ const webApi = {
     create: (data: any) => post<any>('/api/projects', data),
     update: (id: string, updates: any) => put<any>(`/api/projects/${id}`, updates),
     delete: (id: string) => del<void>(`/api/projects/${id}`),
+    restore: (id: string) => post<any>(`/api/projects/${id}/restore`, {}),
+    discover: (id: string) => post<any>(`/api/projects/${id}/discover`, {}),
+    importDiscovered: (id: string, items: any[]) => post<any>(`/api/projects/${id}/import-discovered`, { items }),
+    clearItems: (id: string) => post<any>(`/api/projects/${id}/clear-items`, {}),
   },
 
   mcp: {
@@ -120,7 +163,15 @@ const webApi = {
 const electronApi = {
   get agent()       { return window.api.agent; },
   get skill()       { return window.api.skill; },
-  get project()     { return window.api.project; },
+  get project()     {
+    const base = window.api.project;
+    return {
+      ...base,
+      restore: (_id: string) => Promise.reject(new Error('Restore requires web mode')),
+      discover: (_id: string) => Promise.reject(new Error('Discovery requires web mode')),
+      importDiscovered: (_id: string, _items: any[]) => Promise.reject(new Error('Import requires web mode')),
+    };
+  },
   get mcp()         { return window.api.mcp; },
   get gitProvider() { return window.api.gitProvider; },
   generate: {

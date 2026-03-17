@@ -20,25 +20,26 @@ const verifyProject = async (projectId: string, userId: string) => {
   });
 };
 
-// List all skills for a project
+// List all skills for a project (or all if no projectId given)
 skills.get('/', requireAuth, async (c) => {
   const session = c.get('session')!;
   const projectId = c.req.query('projectId');
   
-  if (!projectId) {
-    return c.json({ error: 'projectId query parameter required' }, 400);
-  }
-  
-  const project = await verifyProject(projectId, session.user.id);
-  if (!project) {
-    return c.json({ error: 'Project not found' }, 404);
+  if (projectId) {
+    const project = await verifyProject(projectId, session.user.id);
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
   }
   
   const skillList = await prisma.skill.findMany({
-    where: { projectId },
+    where: projectId
+      ? { projectId }
+      : { project: { userId: session.user.id, deletedAt: null } },
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true,
+      projectId: true,
       name: true,
       createdAt: true,
       updatedAt: true,
@@ -160,6 +161,95 @@ skills.delete('/:id', requireAuth, async (c) => {
   await prisma.skill.delete({ where: { id } });
   
   return c.json({ success: true });
+});
+
+// ── Export ───────────────────────────────────────────────────────────────────
+
+function exportSkillForCopilot(skill: any): string {
+  let md = '---\n';
+  md += `name: ${skill.metadata.name}\n`;
+  md += `version: ${skill.metadata.version}\n`;
+  md += `description: ${skill.metadata.description}\n`;
+  if (skill.metadata.category) md += `category: ${skill.metadata.category}\n`;
+  md += '---\n\n';
+  md += `# ${skill.metadata.name}\n\n`;
+  md += `**Version:** ${skill.metadata.version}\n\n`;
+  md += `**Description:** ${skill.metadata.description}\n\n`;
+  if (skill.metadata.category) md += `**Category:** ${skill.metadata.category}\n\n`;
+  if (skill.markdown) md += skill.markdown;
+  if (skill.scripts?.length) {
+    md += '\n## Scripts\n\n';
+    skill.scripts.forEach((s: any) => { md += `### ${s.language}\n\n\`\`\`${s.language}\n${s.content}\n\`\`\`\n\n`; });
+  }
+  return md;
+}
+
+function exportSkillPlainMarkdown(skill: any): string {
+  let md = `# ${skill.metadata.name}\n\n> ${skill.metadata.description}\n\n`;
+  if (skill.metadata.category) md += `**Category:** ${skill.metadata.category}  \n`;
+  md += `**Version:** ${skill.metadata.version}\n\n`;
+  if (skill.markdown) md += skill.markdown + '\n\n';
+  if (skill.scripts?.length) {
+    md += '## Scripts\n\n';
+    skill.scripts.forEach((s: any) => { md += `\`\`\`${s.language}\n${s.content}\n\`\`\`\n\n`; });
+  }
+  return md;
+}
+
+function exportSkillToMd(skill: any, platform: string = 'github-copilot'): string {
+  switch (platform) {
+    case 'claude':
+    case 'opencode': return exportSkillPlainMarkdown(skill);
+    case 'cursor': {
+      let mdc = `---\ndescription: ${skill.metadata.description}\nglobs:\nalwaysApply: false\n---\n\n`;
+      mdc += `# ${skill.metadata.name}\n\n`;
+      if (skill.markdown) mdc += skill.markdown + '\n\n';
+      if (skill.scripts?.length) {
+        mdc += '## Scripts\n\n';
+        skill.scripts.forEach((s: any) => { mdc += `\`\`\`${s.language}\n${s.content}\n\`\`\`\n\n`; });
+      }
+      return mdc;
+    }
+    case 'antigravity': return JSON.stringify({
+      name: skill.metadata.name, version: skill.metadata.version,
+      description: skill.metadata.description, category: skill.metadata.category,
+      scripts: (skill.scripts || []).map((s: any) => ({ language: s.language, path: s.path })),
+    }, null, 2);
+    default: return exportSkillForCopilot(skill);
+  }
+}
+
+function exportSkillToYaml(skill: any): string {
+  if (skill.yaml?.content) return skill.yaml.content;
+  // Simple YAML generation without external dep
+  let yaml = `name: ${JSON.stringify(skill.metadata.name)}\n`;
+  yaml += `version: ${JSON.stringify(skill.metadata.version)}\n`;
+  yaml += `description: ${JSON.stringify(skill.metadata.description)}\n`;
+  if (skill.metadata.category) yaml += `category: ${JSON.stringify(skill.metadata.category)}\n`;
+  if (skill.scripts?.length) {
+    yaml += 'scripts:\n';
+    skill.scripts.forEach((s: any) => {
+      yaml += `  - language: ${JSON.stringify(s.language)}\n`;
+      if (s.path) yaml += `    path: ${JSON.stringify(s.path)}\n`;
+    });
+  }
+  return yaml;
+}
+
+// Export skill to markdown
+skills.post('/export-md', requireAuth, async (c) => {
+  const body = await c.req.json();
+  const { skill, platform } = body;
+  if (!skill) return c.json({ error: 'skill required' }, 400);
+  return c.json(exportSkillToMd(skill, platform));
+});
+
+// Export skill to YAML
+skills.post('/export-yaml', requireAuth, async (c) => {
+  const body = await c.req.json();
+  const { skill } = body;
+  if (!skill) return c.json({ error: 'skill required' }, 400);
+  return c.json(exportSkillToYaml(skill));
 });
 
 export default skills;

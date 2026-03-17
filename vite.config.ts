@@ -29,6 +29,13 @@ export default defineConfig({
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+          // Skip proxy for source file requests (e.g. /api/index.ts)
+          // so Vite can serve modules from src/renderer/api/
+          bypass(req) {
+            if (req.url && /\.\w+(\?|$)/.test(req.url)) {
+              return req.url;
+            }
+          },
         },
       },
     }),
