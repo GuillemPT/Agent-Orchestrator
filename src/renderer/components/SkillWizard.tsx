@@ -109,6 +109,15 @@ function SkillWizard({ projectId }: SkillWizardProps) {
     }
   };
 
+  const loadSkill = async (id: string) => {
+    try {
+      const full = await api.skill.getById(id);
+      setCurrentSkill(full);
+    } catch (error) {
+      console.error('Failed to load skill:', error);
+    }
+  };
+
   const createNewSkill = async () => {
     if (!projectId) {
       alert('Please select a project first to create a new skill.');
@@ -384,7 +393,7 @@ function SkillWizard({ projectId }: SkillWizardProps) {
             <div
               key={skill.id}
               className={`skill-item ${currentSkill?.id === skill.id ? 'active' : ''}`}
-              onClick={() => setCurrentSkill(skill)}
+              onClick={() => loadSkill(skill.id)}
             >
               <div className="skill-item-row">
                 <div className="skill-name">{skill.metadata.name}</div>
